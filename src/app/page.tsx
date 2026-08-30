@@ -5,15 +5,15 @@ import {
   Sparkles, 
   Volume2, 
   Mic, 
-  Square,
+  Square, 
   CheckCircle2, 
-  PenTool,
-  Loader2,
-  RefreshCw,
-  ToggleLeft,
-  ToggleRight,
-  AlertCircle,
-  X
+  PenTool, 
+  Loader2, 
+  RefreshCw, 
+  ToggleLeft, 
+  ToggleRight, 
+  AlertCircle, 
+  X 
 } from "lucide-react";
 
 interface Token {
@@ -30,14 +30,19 @@ interface AnalysisResult {
 }
 
 const MAX_FREE_COUNT = 5;
+const MAX_CHAR_LIMIT = 300;
 
 export default function Home() {
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // 뷰 모드 토글 (false: 일반 텍스트 뷰 / true: 인터랙티브 단어 분해 뷰)
   const [isTokenView, setIsTokenView] = useState(false);
+
+  // 모바일 터치 대응 단어 팝오버 활성화 인덱스
+  const [activeTokenIdx, setActiveTokenIdx] = useState<number | null>(null);
 
   // 무료 사용량 상태
   const [remainingCount, setRemainingCount] = useState<number>(MAX_FREE_COUNT);
@@ -51,7 +56,7 @@ export default function Home() {
 
   const recognitionRef = useRef<any>(null);
 
-  // 1. 일일 무료 사용량 로컬스토리지 초기화 및 날짜 체크
+  // 1. 일일 무료 사용량 로컬스토리지 초기화
   useEffect(() => {
     if (typeof window !== "undefined") {
       const today = new Date().toISOString().split("T")[0];
@@ -59,7 +64,6 @@ export default function Home() {
       const savedCount = localStorage.getItem("zipil_remaining_count");
 
       if (savedDate !== today) {
-        // 날짜가 바뀌었으면 5회로 리셋
         localStorage.setItem("zipil_usage_date", today);
         localStorage.setItem("zipil_remaining_count", MAX_FREE_COUNT.toString());
         setRemainingCount(MAX_FREE_COUNT);
@@ -69,7 +73,7 @@ export default function Home() {
     }
   }, []);
 
-  // 2. Web Speech API (STT: 음성 인식) 초기화
+  // 2. Web Speech API (STT) 초기화
   useEffect(() => {
     if (typeof window !== "undefined") {
       const SpeechRecognition =
@@ -119,7 +123,7 @@ export default function Home() {
     setPronunciationScore(Math.min(calculated, 100));
   };
 
-  // 4. TTS: 원어민 발음 듣기 실행
+  // 4. TTS: 원어민 발음 듣기
   const handlePlayTTS = () => {
     if (!result || !("speechSynthesis" in window)) {
       alert("브라우저가 음성 재생(TTS)을 지원하지 않습니다.");
@@ -160,10 +164,24 @@ export default function Home() {
     }
   };
 
-  // 6. AI 문장 분석 호출 (무료 횟수 차감 연동)
+  // 6. AI 분석 호출 (유효성 검증 & 에러 핸들링 포함)
   const handleAnalyze = async () => {
-    if (!inputText.trim() || loading) return;
+    const trimmed = inputText.trim();
+    setErrorMessage(null);
 
+    // 유효성 검사 1: 공백 및 최소 길이 체크
+    if (!trimmed) {
+      setErrorMessage("교정할 문장을 입력해주세요.");
+      return;
+    }
+
+    // 유효성 검사 2: 최대 글자 수 초과 방지
+    if (trimmed.length > MAX_CHAR_LIMIT) {
+      setErrorMessage(`최대 ${MAX_CHAR_LIMIT}자 이하로 입력해주세요.`);
+      return;
+    }
+
+    // 유효성 검사 3: 무료 사용량 확인
     if (remainingCount <= 0) {
       setShowLimitModal(true);
       return;
@@ -172,48 +190,59 @@ export default function Home() {
     setLoading(true);
     setSpokenText("");
     setPronunciationScore(null);
+    setActiveTokenIdx(null);
 
     try {
       const res = await fetch("/api/analyze", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text: inputText }),
+        body: JSON.stringify({ text: trimmed }),
       });
 
-      if (!res.ok) throw new Error("분석 요청 실패");
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || "서버 통신에 실패했습니다.");
+      }
 
       const data = await res.json();
       setResult(data);
 
-      // 사용량 1회 차감 및 로컬스토리지 저장
       const newCount = remainingCount - 1;
       setRemainingCount(newCount);
       localStorage.setItem("zipil_remaining_count", newCount.toString());
 
-    } catch (err) {
-      alert("문장 분석 중 오류가 발생했습니다. API 키 및 잔액을 확인해주세요.");
-      console.error(err);
+    } catch (err: any) {
+      setErrorMessage(err.message || "문장 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
+      console.error("Analyze Error:", err);
     } finally {
       setLoading(false);
     }
   };
 
+  // 모바일 터치 토글 핸들러
+  const handleTokenClick = (idx: number) => {
+    setActiveTokenIdx(activeTokenIdx === idx ? null : idx);
+  };
+
   return (
-    <main className="min-h-screen bg-[#FAF9F6] text-slate-800 flex flex-col items-center p-6 md:p-12 relative">
+    <main 
+      className="min-h-screen bg-[#FAF9F6] text-slate-800 flex flex-col items-center px-4 py-6 md:p-12 relative"
+      onClick={() => setActiveTokenIdx(null)}
+    >
       {/* 헤더 */}
-      <header className="w-full max-w-4xl flex items-center justify-between py-4 mb-8">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center shadow-sm">
-            <span className="font-bold text-amber-800 text-lg tracking-wider">ㅈㅍㅈ</span>
+      <header className="w-full max-w-4xl flex items-center justify-between py-3 mb-6 md:mb-8">
+        <div className="flex items-center gap-2.5 md:gap-3">
+          <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center shadow-xs shrink-0">
+            <span className="font-bold text-amber-800 text-base md:text-lg tracking-wider">ㅈㅍㅈ</span>
           </div>
           <div>
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">집필중 (Zipil)</h1>
-            <p className="text-xs text-slate-500">AI 영작 & 인터랙티브 발음 교정 워크스페이스</p>
+            <h1 className="text-lg md:text-xl font-bold tracking-tight text-slate-900 leading-tight">집필중 (Zipil)</h1>
+            <p className="text-[11px] md:text-xs text-slate-500">AI 영작 & 인터랙티브 발음 교정 워크스페이스</p>
           </div>
         </div>
 
         <div className="flex items-center gap-2">
-          <span className={`text-xs font-semibold px-3 py-1.5 rounded-full border transition-colors ${
+          <span className={`text-xs font-semibold px-2.5 py-1 md:px-3 md:py-1.5 rounded-full border transition-colors ${
             remainingCount > 0 
               ? "bg-violet-100 text-violet-700 border-violet-200"
               : "bg-rose-100 text-rose-700 border-rose-200 animate-pulse"
@@ -223,32 +252,45 @@ export default function Home() {
         </div>
       </header>
 
-      {/* 워크스페이스 */}
-      <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-6">
+      {/* 워크스페이스 (모바일 1단 세로 / 데스크톱 2단 분할) */}
+      <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
         
-        {/* 좌측: 문장 입력 */}
-        <section className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between min-h-[480px]">
+        {/* 좌측: 문장 입력 카드 */}
+        <section className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between min-h-[380px] md:min-h-[480px]">
           <div>
-            <div className="flex items-center justify-between mb-3">
-              <label className="text-sm font-bold text-slate-700 flex items-center gap-2">
+            <div className="flex items-center justify-between mb-2.5">
+              <label className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
                 <PenTool className="w-4 h-4 text-amber-600" />
                 작성할 문장 (한글 또는 영문)
               </label>
-              <span className="text-xs text-slate-400">{inputText.length}자</span>
+              <span className={`text-xs ${inputText.length > MAX_CHAR_LIMIT ? "text-rose-500 font-bold" : "text-slate-400"}`}>
+                {inputText.length}/{MAX_CHAR_LIMIT}자
+              </span>
             </div>
 
             <textarea
-              className="w-full h-64 p-4 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-amber-300 focus:border-transparent resize-none text-slate-800 text-sm leading-relaxed placeholder:text-slate-400 bg-slate-50/50"
+              className={`w-full h-48 md:h-64 p-3.5 md:p-4 rounded-xl border focus:outline-hidden focus:ring-2 resize-none text-slate-800 text-sm leading-relaxed placeholder:text-slate-400 bg-slate-50/50 transition-all ${
+                inputText.length > MAX_CHAR_LIMIT 
+                  ? "border-rose-300 focus:ring-rose-200" 
+                  : "border-slate-200 focus:ring-amber-300 focus:border-transparent"
+              }`}
               placeholder="영어로 표현하고 싶은 문장이나 교정받고 싶은 영어를 입력하세요..."
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
             />
+
+            {errorMessage && (
+              <div className="mt-2 text-xs text-rose-600 flex items-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                <span>{errorMessage}</span>
+              </div>
+            )}
           </div>
 
           <button
             onClick={handleAnalyze}
-            disabled={loading || !inputText.trim()}
-            className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-colors shadow-sm cursor-pointer disabled:cursor-not-allowed mt-4"
+            disabled={loading || !inputText.trim() || inputText.length > MAX_CHAR_LIMIT}
+            className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-colors shadow-xs cursor-pointer disabled:cursor-not-allowed mt-4 active:scale-[0.99]"
           >
             {loading ? (
               <>
@@ -264,12 +306,12 @@ export default function Home() {
           </button>
         </section>
 
-        {/* 우측: 분석 및 발음 트레이닝 */}
-        <section className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm flex flex-col justify-between min-h-[480px]">
-          <div className="space-y-4">
-            {/* 상단 컨트롤러 (제목, 뷰 스위치, 발음 듣기 버튼) */}
+        {/* 우측: 분석 및 발음 트레이닝 카드 */}
+        <section className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between min-h-[380px] md:min-h-[480px]">
+          <div className="space-y-3.5">
+            {/* 상단 컨트롤러 */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h2 className="text-sm font-bold text-slate-700 flex items-center gap-2">
+              <h2 className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-violet-600" />
                 원어민 교정 결과
               </h2>
@@ -277,10 +319,9 @@ export default function Home() {
               <div className="flex items-center gap-2">
                 {result && (
                   <>
-                    {/* 토큰 뷰 토글 스위치 */}
                     <button
-                      onClick={() => setIsTokenView(!isTokenView)}
-                      className="flex items-center gap-1 text-xs text-slate-600 hover:text-slate-900 px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+                      onClick={(e) => { e.stopPropagation(); setIsTokenView(!isTokenView); }}
+                      className="flex items-center gap-1 text-xs text-slate-600 hover:text-slate-900 px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
                       title="단어 분해 학습 모드 토글"
                     >
                       {isTokenView ? (
@@ -293,18 +334,17 @@ export default function Home() {
                       </span>
                     </button>
 
-                    {/* 발음 듣기 버튼 */}
                     <button 
                       onClick={handlePlayTTS}
                       disabled={isPlayingAudio}
-                      className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg transition-all ${
+                      className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg transition-all active:scale-95 ${
                         isPlayingAudio 
                           ? "bg-amber-100 text-amber-800 border border-amber-300 animate-pulse" 
                           : "bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200"
                       }`}
                     >
                       <Volume2 className="w-3.5 h-3.5" />
-                      {isPlayingAudio ? "재생 중..." : "발음 듣기"}
+                      {isPlayingAudio ? "재생 중" : "발음 듣기"}
                     </button>
                   </>
                 )}
@@ -313,29 +353,36 @@ export default function Home() {
 
             {result ? (
               <>
-                {/* 교정 문장 카드 (토글에 따라 일반 텍스트 뷰 또는 인터랙티브 토큰 뷰 렌더링) */}
-                <div className="p-4 bg-violet-50/40 rounded-xl border border-violet-100/60 space-y-3">
+                {/* 교정 문장 카드 */}
+                <div className="p-3.5 md:p-4 bg-violet-50/40 rounded-xl border border-violet-100/60 space-y-2.5">
                   {isTokenView ? (
-                    /* 인터랙티브 토큰 뷰 (커스텀 팝오버 호버) */
                     <div>
-                      <p className="text-[11px] font-medium text-violet-500 mb-2">단어에 마우스를 올리면 품사와 뜻이 나타납니다</p>
-                      <div className="flex flex-wrap gap-2 text-slate-900 font-medium leading-relaxed">
+                      <p className="text-[11px] font-medium text-violet-500 mb-2">단어를 누르거나 마우스를 올리면 뜻이 나타납니다</p>
+                      <div className="flex flex-wrap gap-1.5 md:gap-2 text-slate-900 font-medium leading-relaxed">
                         {result.tokens.map((token, idx) => (
-                          <div key={idx} className="relative group inline-block">
-                            {/* 단어 칩 */}
-                            <span className="cursor-pointer px-2.5 py-1 rounded-lg bg-white group-hover:bg-violet-600 group-hover:text-white text-slate-800 border border-slate-200 text-sm font-semibold transition-all shadow-xs block">
+                          <div 
+                            key={idx} 
+                            className="relative group inline-block"
+                            onClick={(e) => { e.stopPropagation(); handleTokenClick(idx); }}
+                          >
+                            <span className={`cursor-pointer px-2 py-1 rounded-lg border text-sm font-semibold transition-all shadow-2xs block ${
+                              activeTokenIdx === idx 
+                                ? "bg-violet-600 text-white border-violet-600" 
+                                : "bg-white group-hover:bg-violet-600 group-hover:text-white text-slate-800 border-slate-200"
+                            }`}>
                               {token.word}
                             </span>
 
-                            {/* 커스텀 팝오버 툴팁 카드 */}
-                            <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover:flex flex-col items-center z-30 pointer-events-none">
-                              <div className="bg-slate-900 text-white text-xs rounded-lg py-1.5 px-3 shadow-xl whitespace-nowrap flex items-center gap-1.5 border border-slate-700">
+                            {/* 데스크톱 Hover 및 모바일 Click 팝오버 동시 대응 */}
+                            <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-30 pointer-events-none ${
+                              activeTokenIdx === idx ? "flex" : "hidden group-hover:flex"
+                            } flex-col items-center`}>
+                              <div className="bg-slate-900 text-white text-xs rounded-lg py-1.5 px-2.5 shadow-xl whitespace-nowrap flex items-center gap-1.5 border border-slate-700">
                                 <span className="bg-violet-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
                                   {token.pos}
                                 </span>
                                 <span className="text-slate-100 font-medium">{token.meaning}</span>
                               </div>
-                              {/* 툴팁 아래 화살표 */}
                               <div className="w-2 h-2 bg-slate-900 rotate-45 -mt-1 border-r border-b border-slate-700"></div>
                             </div>
                           </div>
@@ -343,17 +390,15 @@ export default function Home() {
                       </div>
                     </div>
                   ) : (
-                    /* 일반 텍스트 뷰 (기본) */
                     <div>
-                      <p className="text-sm text-slate-900 font-semibold leading-relaxed">
+                      <p className="text-sm md:text-base text-slate-900 font-semibold leading-relaxed">
                         {result.corrected}
                       </p>
                     </div>
                   )}
 
-                  {/* 한국어 완역 표시 */}
                   <p className="text-xs font-medium text-violet-700/90 pt-2 border-t border-violet-200/50 flex items-center gap-1.5">
-                    <span className="text-[11px] bg-violet-200/70 text-violet-800 px-1.5 py-0.5 rounded font-bold">완역</span>
+                    <span className="text-[10px] bg-violet-200/70 text-violet-800 px-1.5 py-0.5 rounded font-bold">완역</span>
                     {result.korean_translation}
                   </p>
                 </div>
@@ -364,9 +409,9 @@ export default function Home() {
                   {result.explanation}
                 </div>
 
-                {/* 발음 인식 결과 피드백 카드 */}
+                {/* 발음 인식 피드백 */}
                 {spokenText && (
-                  <div className="p-3.5 rounded-xl border border-slate-200 bg-slate-50/80 space-y-2">
+                  <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/80 space-y-1.5">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-semibold text-slate-600">내 발음 인식 결과</span>
                       {pronunciationScore !== null && (
@@ -388,7 +433,7 @@ export default function Home() {
                 )}
               </>
             ) : (
-              <div className="h-56 flex flex-col items-center justify-center text-slate-400 text-xs gap-1">
+              <div className="h-44 md:h-56 flex flex-col items-center justify-center text-slate-400 text-xs gap-1">
                 <span>좌측에 문장을 입력하고 분석 버튼을 누르면</span>
                 <span>교정된 문장과 발음 트레이닝 기능이 활성화됩니다.</span>
               </div>
@@ -401,7 +446,7 @@ export default function Home() {
               <button 
                 onClick={handleToggleRecord}
                 disabled={!result}
-                className={`w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed ${
+                className={`w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed active:scale-95 ${
                   isRecording 
                     ? "bg-rose-500 text-white animate-pulse shadow-md ring-4 ring-rose-100" 
                     : "bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-700"
@@ -414,7 +459,7 @@ export default function Home() {
                   {isRecording ? "마이크로 말하는 중..." : "내 발음 녹음하기"}
                 </span>
                 <span className="text-[11px] text-slate-400">
-                  {isRecording ? "다 읽은 후 버튼을 눌러 정지" : "버튼을 누르고 위 문장을 읽어보세요"}
+                  {isRecording ? "다 읽은 후 정지 버튼 클릭" : "버튼을 누르고 위 문장을 읽어보세요"}
                 </span>
               </div>
             </div>
@@ -422,7 +467,7 @@ export default function Home() {
             {spokenText && (
               <button 
                 onClick={() => { setSpokenText(""); setPronunciationScore(null); }}
-                className="text-slate-400 hover:text-slate-600 p-1.5"
+                className="text-slate-400 hover:text-slate-600 p-1.5 cursor-pointer"
                 title="녹음 초기화"
               >
                 <RefreshCw className="w-3.5 h-3.5" />
@@ -433,10 +478,10 @@ export default function Home() {
 
       </div>
 
-      {/* 무료 사용량 소진 시 팝업 모달 */}
+      {/* 무료 사용량 모달 */}
       {showLimitModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 relative">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 relative animate-in fade-in zoom-in-95 duration-150">
             <button 
               onClick={() => setShowLimitModal(false)}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
