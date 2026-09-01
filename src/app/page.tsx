@@ -16,6 +16,14 @@ import {
   X 
 } from "lucide-react";
 
+interface HistoryItem {
+  id: string;
+  originalText: string;
+  correctedText: string;
+  nuance: string;
+  date: string;
+}
+
 interface Token {
   word: string;
   pos: string;
@@ -37,6 +45,8 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [history, setHistory] = useState<HistoryItem[]>([]);
+  const [showHistory, setShowHistory] = useState(false); //기록장 열림/닫힘 상태
 
   // 뷰 모드 토글 (false: 일반 텍스트 뷰 / true: 인터랙티브 단어 분해 뷰)
   const [isTokenView, setIsTokenView] = useState(false);
@@ -206,6 +216,8 @@ export default function Home() {
 
       const data = await res.json();
       setResult(data);
+      
+      saveToHistory(trimmed, data.corrected, data.explanation);
 
       const newCount = remainingCount - 1;
       setRemainingCount(newCount);
@@ -222,6 +234,42 @@ export default function Home() {
   // 모바일 터치 토글 핸들러
   const handleTokenClick = (idx: number) => {
     setActiveTokenIdx(activeTokenIdx === idx ? null : idx);
+  };
+
+  // 컴포넌트 마운트 시 LocalStorage에서 데이터 불러오그
+  useEffect(() => {
+    const savedHistory = localStorage.getItem('zipil_history');
+    if (savedHistory) {
+      setHistory(JSON.parse(savedHistory));
+    }
+  }, []);
+  
+  // 새로운 분석 결과를 히스토리에 저장하는 함수
+  const saveToHistory = (original: string, corrected: string, nuance: string) => {
+    const newItem: HistoryItem = {
+      id: Date.now().toString(), //고유 ID 부여
+      originalText: original,
+      correctedText: corrected,
+      nuance: nuance,
+      date: new Date().toLocaleDateString('ko-KR', {
+        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+      })
+    };
+
+    //최신 기록이 맨 위로 오도록 배열을 합치고 상태 업데이트
+    const updatedHistory = [newItem, ...history];
+    setHistory(updatedHistory);
+
+    //브라우저 LocalStorage에 문자열로 변환하여 저장
+    localStorage.setItem('zipil_history', JSON.stringify(updatedHistory));
+  };
+
+  //지정된 오답노트를 한 번에 삭제
+  const clearHistory = () => {
+    if (confirm('모든 학습 기록을 삭제하시겠습니까?')) {
+      setHistory([]);
+      localStorage.removeItem('zipil_history');
+    }
   };
 
   return (
@@ -242,6 +290,16 @@ export default function Home() {
         </div>
 
         <div className="flex items-center gap-2">
+        <button
+          onClick={() => setShowHistory(true)}
+          className="text-xs font-semibold px-2.5 py-1 md:px-3 md:py-1.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 transition-colors flex items-center gap-1 cursor-pointer">
+          <span>기록장</span>
+          {history.length > 0 && (
+            <span className="bg-slate-800 text-white text-[10px] px-1.5 rounded-full">
+            {history.length}
+            </span>
+          )}
+          </button>
           <span className={`text-xs font-semibold px-2.5 py-1 md:px-3 md:py-1.5 rounded-full border transition-colors ${
             remainingCount > 0 
               ? "bg-violet-100 text-violet-700 border-violet-200"
@@ -503,6 +561,64 @@ export default function Home() {
             >
               확인
             </button>
+          </div>
+        </div>
+      )}
+      {/* 👇 새로 추가하는 학습 기록장 모달 */}
+      {showHistory && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] flex flex-col shadow-2xl border border-slate-100 relative animate-in fade-in zoom-in-95 duration-150">
+            
+            {/* 모달 헤더 */}
+            <div className="flex items-center justify-between p-5 border-b border-slate-100">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <PenTool className="w-5 h-5 text-amber-600" />
+                내 학습 기록장
+              </h3>
+              <button 
+                onClick={() => setShowHistory(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 모달 바디 (스크롤 영역) */}
+            <div className="p-5 overflow-y-auto flex-1 bg-slate-50/50">
+              {history.length === 0 ? (
+                <div className="py-12 flex flex-col items-center justify-center text-slate-400">
+                  <span className="text-sm">아직 저장된 학습 기록이 없습니다.</span>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {history.map((item) => (
+                    <div key={item.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2">
+                      <div className="flex justify-between items-start mb-1">
+                        <span className="text-[10px] font-medium text-slate-400">{item.date}</span>
+                      </div>
+                      <p className="text-xs text-slate-500 line-through">{item.originalText}</p>
+                      <p className="text-sm font-bold text-slate-800">{item.correctedText}</p>
+                      <div className="mt-2 text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 leading-relaxed">
+                        <span className="font-semibold text-slate-700 block mb-1">💡 뉘앙스 노트</span>
+                        {item.nuance}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* 모달 푸터 (초기화 버튼) */}
+            {history.length > 0 && (
+              <div className="p-4 border-t border-slate-100 flex justify-end">
+                <button
+                  onClick={clearHistory}
+                  className="text-xs font-semibold text-rose-500 hover:text-rose-600 px-3 py-1.5 rounded-lg hover:bg-rose-50 transition-colors cursor-pointer"
+                >
+                  기록 전체 비우기
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
