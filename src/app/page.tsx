@@ -64,6 +64,9 @@ export default function Home() {
   const [spokenText, setSpokenText] = useState("");
   const [pronunciationScore, setPronunciationScore] = useState<number | null>(null);
 
+  // 발음 상세 결과(단어별 일치 여부) 상태 추가
+  const [pronunciationDetails, setPronunciationDetails] = useState<{word: string, isMatched: boolean}[] | null>(null);
+
   const recognitionRef = useRef<any>(null);
 
   // 1. 일일 무료 사용량 로컬스토리지 초기화
@@ -115,22 +118,36 @@ export default function Home() {
     }
   }, [result]);
 
-  // 3. 발음 일치도 점수 계산 로직
+  // 3. 발음 일치도 점수 계산 로직 (Day 7 고도화)
   const calculateScore = (userSpeech: string) => {
     if (!result) return;
 
+    // 화면 표시용 원문 단어 배열
+    const targetWords = result.corrected.split(/\s+/); 
+    // 비교용 정제 단어 배열 (소문자 변환 및 특수기호 제거)
     const cleanTarget = result.corrected.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/);
     const cleanSpoken = userSpeech.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/);
 
     let matchCount = 0;
-    cleanSpoken.forEach((word) => {
-      if (cleanTarget.includes(word)) {
+    const details = targetWords.map((originalWord, index) => {
+      const cleanWord = cleanTarget[index];
+      const isMatched = cleanSpoken.includes(cleanWord);
+      
+      if (isMatched) {
         matchCount++;
+        // 매칭된 단어는 사용자 발음 배열에서 제거하여 중복 매칭 방지
+        const spokenIdx = cleanSpoken.indexOf(cleanWord);
+        if (spokenIdx > -1) {
+          cleanSpoken.splice(spokenIdx, 1);
+        }
       }
+      
+      return { word: originalWord, isMatched };
     });
 
     const calculated = Math.round((matchCount / Math.max(cleanTarget.length, 1)) * 100);
     setPronunciationScore(Math.min(calculated, 100));
+    setPronunciationDetails(details);
   };
 
   // 4. TTS: 원어민 발음 듣기
@@ -165,6 +182,7 @@ export default function Home() {
     } else {
       setSpokenText("");
       setPronunciationScore(null);
+      setPronunciationDetails(null);
       try {
         recognitionRef.current.start();
         setIsRecording(true);
@@ -201,6 +219,7 @@ export default function Home() {
     setSpokenText("");
     setPronunciationScore(null);
     setActiveTokenIdx(null);
+    setPronunciationDetails(null);
 
     try {
       const res = await fetch("/api/analyze", {
@@ -467,26 +486,47 @@ export default function Home() {
                   {result.explanation}
                 </div>
 
-                {/* 발음 인식 피드백 */}
+                {/* 발음 인식 피드백 (Day 7 고도화) */}
                 {spokenText && (
-                  <div className="p-3 rounded-xl border border-slate-200 bg-slate-50/80 space-y-1.5">
+                  <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/80 space-y-3">
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-slate-600">내 발음 인식 결과</span>
+                      <span className="text-xs font-bold text-slate-700">발음 분석 결과</span>
                       {pronunciationScore !== null && (
-                        <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full shadow-sm ${
                           pronunciationScore >= 80 
                             ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
                             : pronunciationScore >= 50
                             ? "bg-amber-100 text-amber-700 border border-amber-300"
                             : "bg-rose-100 text-rose-700 border border-rose-300"
                         }`}>
-                          일치율 {pronunciationScore}%
+                          정확도 {pronunciationScore}%
                         </span>
                       )}
                     </div>
-                    <p className="text-xs text-slate-800 italic bg-white p-2 rounded border border-slate-100">
-                      "{spokenText}"
-                    </p>
+                    
+                    {/* 단어별 색상 하이라이트 피드백 */}
+                    {pronunciationDetails && (
+                      <div className="flex flex-wrap gap-1.5 p-3 bg-white rounded-lg border border-slate-100 shadow-sm">
+                        {pronunciationDetails.map((item, idx) => (
+                          <span 
+                            key={idx} 
+                            className={`text-sm md:text-base font-semibold px-1 rounded transition-colors ${
+                              item.isMatched 
+                                ? "text-emerald-600 bg-emerald-50" 
+                                : "text-rose-500 bg-rose-50 underline decoration-rose-300 decoration-2 underline-offset-2"
+                            }`}
+                          >
+                            {item.word}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {/* 실제 인식된 음성 텍스트 */}
+                    <div className="mt-2 text-xs text-slate-500 flex items-start gap-1.5 bg-white p-2 rounded border border-slate-100">
+                      <span className="font-semibold text-slate-600 shrink-0">내 음성:</span>
+                      <p className="italic">"{spokenText}"</p>
+                    </div>
                   </div>
                 )}
               </>
@@ -524,7 +564,11 @@ export default function Home() {
 
             {spokenText && (
               <button 
-                onClick={() => { setSpokenText(""); setPronunciationScore(null); }}
+                onClick={() => { 
+                  setSpokenText(""); 
+                  setPronunciationScore(null); 
+                  setPronunciationDetails(null);
+                }}
                 className="text-slate-400 hover:text-slate-600 p-1.5 cursor-pointer"
                 title="녹음 초기화"
               >
