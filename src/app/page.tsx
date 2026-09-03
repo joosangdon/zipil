@@ -37,6 +37,14 @@ interface AnalysisResult {
   tokens: Token[];
 }
 
+interface VocabItem {
+  id: string;
+  word: string;
+  meaning: string;
+  pos: string;
+  date: string;
+}
+
 const MAX_FREE_COUNT = 5;
 const MAX_CHAR_LIMIT = 300;
 
@@ -47,6 +55,9 @@ export default function Home() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
   const [showHistory, setShowHistory] = useState(false); //기록장 열림/닫힘 상태
+
+  const [vocab, setVocab] = useState<VocabItem[]>([]);
+  const [showVocab, setShowVocab] = useState(false);
 
   // 뷰 모드 토글 (false: 일반 텍스트 뷰 / true: 인터랙티브 단어 분해 뷰)
   const [isTokenView, setIsTokenView] = useState(false);
@@ -291,6 +302,43 @@ export default function Home() {
     }
   };
 
+  // 컴포넌트 마운트 시 단어장 데이터 불러오기
+  useEffect(() => {
+    const savedVocab = localStorage.getItem('zipil_vocab');
+    if (savedVocab) {
+      setVocab(JSON.parse(savedVocab));
+    }
+  }, []);
+
+  // 단어장에 추가하는 함수
+  const addToVocab = (word: string, meaning: string, pos: string) => {
+    // 중복 방지: 이미 있는 단어면 추가 안 함
+    if (vocab.some(v => v.word.toLowerCase() === word.toLowerCase())) {
+      alert("이미 단어장에 저장된 단어입니다.");
+      return;
+    }
+
+    const newItem: VocabItem = {
+      id: Date.now().toString(),
+      word: word,
+      meaning: meaning,
+      pos: pos,
+      date: new Date().toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
+    };
+
+    const updatedVocab = [newItem, ...vocab];
+    setVocab(updatedVocab);
+    localStorage.setItem('zipil_vocab', JSON.stringify(updatedVocab));
+    alert(`'${word}' 단어가 저장되었습니다!`);
+  };
+
+  // 단어장에서 특정 단어 삭제 함수
+  const removeVocab = (id: string) => {
+    const updatedVocab = vocab.filter(item => item.id !== id);
+    setVocab(updatedVocab);
+    localStorage.setItem('zipil_vocab', JSON.stringify(updatedVocab));
+  };
+
   return (
     <main 
       className="min-h-screen bg-[#FAF9F6] text-slate-800 flex flex-col items-center px-4 py-6 md:p-12 relative"
@@ -307,8 +355,18 @@ export default function Home() {
             <p className="text-[11px] md:text-xs text-slate-500">AI 영작 & 인터랙티브 발음 교정 워크스페이스</p>
           </div>
         </div>
-
         <div className="flex items-center gap-2">
+        <button
+            onClick={() => setShowVocab(true)}
+            className="text-xs font-semibold px-2.5 py-1 md:px-3 md:py-1.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 transition-colors flex items-center gap-1 cursor-pointer"
+          >
+            <span>단어장</span>
+            {vocab.length > 0 && (
+              <span className="bg-emerald-600 text-white text-[10px] px-1.5 rounded-full">
+                {vocab.length}
+              </span>
+            )}
+          </button>
         <button
           onClick={() => setShowHistory(true)}
           className="text-xs font-semibold px-2.5 py-1 md:px-3 md:py-1.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 transition-colors flex items-center gap-1 cursor-pointer">
@@ -451,7 +509,7 @@ export default function Home() {
                             </span>
 
                             {/* 데스크톱 Hover 및 모바일 Click 팝오버 동시 대응 */}
-                            <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-30 pointer-events-none ${
+                            <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-30 ${
                               activeTokenIdx === idx ? "flex" : "hidden group-hover:flex"
                             } flex-col items-center`}>
                               <div className="bg-slate-900 text-white text-xs rounded-lg py-1.5 px-2.5 shadow-xl whitespace-nowrap flex items-center gap-1.5 border border-slate-700">
@@ -459,6 +517,16 @@ export default function Home() {
                                   {token.pos}
                                 </span>
                                 <span className="text-slate-100 font-medium">{token.meaning}</span>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    addToVocab(token.word, token.meaning, token.pos);
+                                  }}
+                                  className="ml-1 bg-slate-700 hover:bg-amber-500 text-white rounded-full w-5 h-5 flex items-center justify-center transition-colors shadow-sm"
+                                  title="단어장에 추가"
+                                  >
+                                    +
+                                  </button>
                               </div>
                               <div className="w-2 h-2 bg-slate-900 rotate-45 -mt-1 border-r border-b border-slate-700"></div>
                             </div>
@@ -666,6 +734,72 @@ export default function Home() {
           </div>
         </div>
       )}
+      {/* 👇 새로 추가하는 단어장 사이드바 (Drawer) */}
+      {/* 배경 딤(Dim) 처리 */}
+      <div 
+        className={`fixed inset-0 bg-slate-900/20 backdrop-blur-[2px] z-40 transition-opacity duration-300 ${
+          showVocab ? "opacity-100 visible" : "opacity-0 invisible"
+        }`}
+        onClick={() => setShowVocab(false)}
+      />
+
+      {/* 사이드바 패널 (오른쪽에서 등장) */}
+      <div className={`fixed top-0 right-0 h-full w-full md:w-96 bg-slate-50 shadow-2xl z-50 flex flex-col transform transition-transform duration-300 ease-in-out ${
+        showVocab ? "translate-x-0" : "translate-x-full"
+      }`}>
+        {/* 사이드바 헤더 */}
+        <div className="flex items-center justify-between p-5 bg-white border-b border-slate-200">
+          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <span className="text-lg">📚</span>
+            내 단어장
+          </h3>
+          <button 
+            onClick={() => setShowVocab(false)}
+            className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        {/* 사이드바 목록 (스크롤) */}
+        <div className="p-4 overflow-y-auto flex-1">
+          {vocab.length === 0 ? (
+            <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-2">
+              <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-2xl">
+                👀
+              </div>
+              <span className="text-sm">저장된 단어가 없습니다.</span>
+              <span className="text-xs text-slate-400">교정 결과에서 단어를 눌러 추가해보세요!</span>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {vocab.map((item) => (
+                <div key={item.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-2 group relative">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h4 className="text-lg font-bold text-slate-800">{item.word}</h4>
+                      <span className="text-[10px] font-medium text-slate-400">{item.date} 추가됨</span>
+                    </div>
+                    <button 
+                      onClick={() => removeVocab(item.id)}
+                      className="text-rose-400 hover:text-rose-600 p-1 md:opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                      title="삭제"
+                    >
+                      <X className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <div className="flex items-center gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <span className="bg-violet-100 text-violet-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                      {item.pos}
+                    </span>
+                    <span className="text-sm text-slate-700 font-medium">{item.meaning}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
     </main>
   );
 }
