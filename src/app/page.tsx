@@ -78,6 +78,8 @@ export default function Home() {
 
   const [isHistoryBlindMode, setIsHistoryBlindMode] = useState(false);
   const [isVocabBlindMode, setIsVocabBlindMode] = useState(false);
+
+  const [ttsRate, setTtsRate] = useState<number>(1.0);
   
   const recognitionRef = useRef<any>(null);
 
@@ -198,10 +200,13 @@ export default function Home() {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(result.corrected);
     utterance.lang = "en-US";
-    utterance.rate = 0.9;
+
+    utterance.rate = ttsRate;
+
     utterance.onstart = () => setIsPlayingAudio(true);
     utterance.onend = () => setIsPlayingAudio(false);
     utterance.onerror = () => setIsPlayingAudio(false);
+
     window.speechSynthesis.speak(utterance);
   };
 
@@ -347,8 +352,8 @@ export default function Home() {
       className="min-h-screen bg-[#FAF9F6] text-slate-800 flex flex-col items-center px-4 py-6 md:p-12 relative"
       onClick={() => setActiveTokenIdx(null)}
     >
-      {/* 헤더 */}
-      <header className="w-full max-w-4xl flex items-center justify-between py-3 mb-6 md:mb-8">
+      {/* 👇 1. 헤더 가로폭 확장 (max-w-4xl -> max-w-5xl) */}
+      <header className="w-full max-w-5xl flex items-center justify-between py-3 mb-6 md:mb-8">
         <div className="flex items-center gap-2.5 md:gap-3">
           <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center shadow-xs shrink-0">
             <span className="font-bold text-amber-800 text-base md:text-lg tracking-wider">ㅈㅍㅈ</span>
@@ -390,13 +395,13 @@ export default function Home() {
         </div>
       </header>
 
-      {/* 워크스페이스 */}
-      <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
+      {/* 👇 2. 워크스페이스 가로폭 및 간격 확장 (max-w-5xl, md:gap-8) */}
+      <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8">
         
-        {/* 좌측: 문장 입력 카드 */}
-        <section className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between min-h-[380px] md:min-h-[480px]">
+        {/* 👇 3. 좌측 카드 패딩 및 높이 확장 (md:p-8, md:min-h-[600px]) */}
+        <section className="bg-white p-5 md:p-8 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between min-h-[380px] md:min-h-[600px]">
           <div>
-            <div className="flex items-center justify-between mb-2.5">
+            <div className="flex items-center justify-between mb-3.5">
               <label className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
                 <PenTool className="w-4 h-4 text-amber-600" />
                 작성할 문장 (한글 또는 영문)
@@ -406,8 +411,9 @@ export default function Home() {
               </span>
             </div>
 
+            {/* 👇 4. 텍스트 입력창 높이 및 패딩 확장 (md:h-80, md:p-5) */}
             <textarea
-              className={`w-full h-48 md:h-64 p-3.5 md:p-4 rounded-xl border focus:outline-hidden focus:ring-2 resize-none text-slate-800 text-sm leading-relaxed placeholder:text-slate-400 bg-slate-50/50 transition-all ${
+              className={`w-full h-48 md:h-80 p-3.5 md:p-5 rounded-xl border focus:outline-hidden focus:ring-2 resize-none text-slate-800 text-sm leading-relaxed placeholder:text-slate-400 bg-slate-50/50 transition-all ${
                 inputText.length > MAX_CHAR_LIMIT 
                   ? "border-rose-300 focus:ring-rose-200" 
                   : "border-slate-200 focus:ring-amber-300 focus:border-transparent"
@@ -428,7 +434,7 @@ export default function Home() {
           <button
             onClick={handleAnalyze}
             disabled={loading || !inputText.trim() || inputText.length > MAX_CHAR_LIMIT}
-            className="w-full py-3 px-4 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-colors shadow-xs cursor-pointer disabled:cursor-not-allowed mt-4 active:scale-[0.99]"
+            className="w-full py-3.5 px-4 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-colors shadow-xs cursor-pointer disabled:cursor-not-allowed mt-4 active:scale-[0.99]"
           >
             {loading ? (
               <>
@@ -447,18 +453,18 @@ export default function Home() {
         {/* 우측: 분석 및 발음 트레이닝 카드 */}
         <section className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between min-h-[380px] md:min-h-[480px]">
           <div className="space-y-3.5">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
-              <h2 className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-violet-600" />
-                원어민 교정 결과
-              </h2>
+            {/* 상단 컨트롤러 */}
+            {/* 👇 justify-between을 justify-end로 변경하여 버튼들을 우측으로 깔끔하게 밀어줍니다 */}
+            <div className="flex items-center justify-end border-b border-slate-100 pb-3 min-h-[44px]">
+              
+              {/* 덩그러니 있던 체크 아이콘 영역은 완전히 삭제했습니다! */}
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5 md:gap-2">
                 {result && (
                   <>
                     <button
                       onClick={(e) => { e.stopPropagation(); setIsTokenView(!isTokenView); }}
-                      className="flex items-center gap-1 text-xs text-slate-600 hover:text-slate-900 px-2 py-1 rounded-md bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer"
+                      className="flex items-center gap-1 text-xs text-slate-600 hover:text-slate-900 px-2 py-1.5 rounded-md bg-slate-100 hover:bg-slate-200 transition-colors cursor-pointer whitespace-nowrap"
                       title="단어 분해 학습 모드 토글"
                     >
                       {isTokenView ? (
@@ -471,10 +477,22 @@ export default function Home() {
                       </span>
                     </button>
 
+                    <select
+                      value={ttsRate}
+                      onChange={(e) => setTtsRate(Number(e.target.value))}
+                      disabled={isPlayingAudio}
+                      className="text-xs font-semibold px-1.5 py-1 rounded-md bg-slate-50 text-slate-600 border border-slate-200 outline-none focus:ring-2 focus:ring-violet-200 cursor-pointer hover:bg-slate-100 transition-colors disabled:opacity-50"
+                      title="재생 속도 선택"
+                    >
+                      <option value={1.0}>1.0x (기본)</option>
+                      <option value={0.75}>0.75x</option>
+                      <option value={0.5}>0.5x</option>
+                    </select>
+
                     <button 
                       onClick={handlePlayTTS}
                       disabled={isPlayingAudio}
-                      className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1 rounded-lg transition-all active:scale-95 ${
+                      className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-md transition-all active:scale-95 whitespace-nowrap ${
                         isPlayingAudio 
                           ? "bg-amber-100 text-amber-800 border border-amber-300 animate-pulse" 
                           : "bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200"
