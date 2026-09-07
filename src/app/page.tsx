@@ -13,7 +13,9 @@ import {
   ToggleLeft, 
   ToggleRight, 
   AlertCircle, 
-  X 
+  X,
+  Eye,
+  EyeOff
 } from "lucide-react";
 
 interface HistoryItem {
@@ -78,7 +80,13 @@ export default function Home() {
   // 발음 상세 결과(단어별 일치 여부) 상태 추가
   const [pronunciationDetails, setPronunciationDetails] = useState<{word: string, isMatched: boolean}[] | null>(null);
 
+  // 👇 Day 9: 블라인드(가리기) 모드 상태 추가
+  const [isHistoryBlindMode, setIsHistoryBlindMode] = useState(false);
+  const [isVocabBlindMode, setIsVocabBlindMode] = useState(false);
+  
   const recognitionRef = useRef<any>(null);
+
+  
 
   // 1. 일일 무료 사용량 로컬스토리지 초기화
   useEffect(() => {
@@ -676,17 +684,29 @@ export default function Home() {
           </div>
         </div>
       )}
-      {/* 👇 새로 추가하는 학습 기록장 모달 */}
+      {/* 👇 학습 기록장 모달 (수정 완료본) */}
       {showHistory && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] flex flex-col shadow-2xl border border-slate-100 relative animate-in fade-in zoom-in-95 duration-150">
             
             {/* 모달 헤더 */}
             <div className="flex items-center justify-between p-5 border-b border-slate-100">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <PenTool className="w-5 h-5 text-amber-600" />
-                내 학습 기록장
-              </h3>
+              <div className="flex items-center gap-4">
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <PenTool className="w-5 h-5 text-amber-600" />
+                  내 학습 기록장
+                </h3>
+                {/* 블라인드 스위치 */}
+                <button
+                  onClick={() => setIsHistoryBlindMode(!isHistoryBlindMode)}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
+                    isHistoryBlindMode ? "bg-violet-100 text-violet-700" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  }`}
+                >
+                  {isHistoryBlindMode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  블라인드 {isHistoryBlindMode ? "ON" : "OFF"}
+                </button>
+              </div>
               <button 
                 onClick={() => setShowHistory(false)}
                 className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
@@ -704,16 +724,38 @@ export default function Home() {
               ) : (
                 <div className="space-y-4">
                   {history.map((item) => (
-                    <div key={item.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm space-y-2">
+                    <div key={item.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-2">
                       <div className="flex justify-between items-start mb-1">
                         <span className="text-[10px] font-medium text-slate-400">{item.date}</span>
                       </div>
-                      <p className="text-xs text-slate-500 line-through">{item.originalText}</p>
-                      <p className="text-sm font-bold text-slate-800">{item.correctedText}</p>
-                      <div className="mt-2 text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 leading-relaxed">
-                        <span className="font-semibold text-slate-700 block mb-1">💡 뉘앙스 노트</span>
-                        {item.nuance}
+                      
+                      {/* 1 & 3번 반영: 취소선 제거 및 블라인드 영향 안 받음 (플래시카드 앞면 'Q') */}
+                      <div className="flex items-start gap-1.5">
+                        <span className="shrink-0 bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded text-[10px] font-bold mt-0.5">Q</span>
+                        <p className="text-xs text-slate-600 font-medium leading-relaxed">
+                          {item.originalText}
+                        </p>
                       </div>
+
+                      {/* 3번 반영: 정답 문장만 블라인드 처리 (플래시카드 뒷면 'A') */}
+                      <div className="flex items-start gap-1.5 mt-0.5">
+                        <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold mt-0.5 transition-colors ${
+                          isHistoryBlindMode ? "bg-slate-200 text-slate-400" : "bg-violet-100 text-violet-600"
+                        }`}>A</span>
+                        <p className={`text-sm font-bold transition-all duration-300 flex-1 ${
+                          isHistoryBlindMode ? "text-transparent bg-slate-200 rounded blur-[5px] select-none cursor-help hover:text-slate-800 hover:bg-transparent hover:blur-none" : "text-slate-800"
+                        }`}>
+                          {item.correctedText}
+                        </p>
+                      </div>
+
+                      {/* 2번 반영: 블라인드 모드 시 뉘앙스 노트 숨김 */}
+                      {!isHistoryBlindMode && (
+                        <div className="mt-1.5 text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 leading-relaxed animate-in fade-in duration-300">
+                          <span className="font-semibold text-slate-700 block mb-1">💡 뉘앙스 노트</span>
+                          {item.nuance}
+                        </div>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -749,10 +791,23 @@ export default function Home() {
       }`}>
         {/* 사이드바 헤더 */}
         <div className="flex items-center justify-between p-5 bg-white border-b border-slate-200">
-          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-            <span className="text-lg">📚</span>
-            내 단어장
-          </h3>
+          {/* 👇 이 div를 추가했습니다 */}
+          <div className="flex items-center gap-4">
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <span className="text-lg">📚</span>
+              내 단어장
+            </h3>
+            {/* 추가된 블라인드 스위치 */}
+            <button
+              onClick={() => setIsVocabBlindMode(!isVocabBlindMode)}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
+                isVocabBlindMode ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+              }`}
+            >
+              {isVocabBlindMode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+              블라인드 {isVocabBlindMode ? "ON" : "OFF"}
+            </button>
+          </div>
           <button 
             onClick={() => setShowVocab(false)}
             className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
@@ -777,7 +832,11 @@ export default function Home() {
                 <div key={item.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-2 group relative">
                   <div className="flex items-start justify-between">
                     <div>
-                      <h4 className="text-lg font-bold text-slate-800">{item.word}</h4>
+                      <h4 className={`text-lg font-bold transition-all duration-300 w-fit ${
+                        isVocabBlindMode ? "text-transparent bg-slate-300 rounded blur-md select-none cursor-help hover:text-slate-800 hover:bg-transparent hover:blur-none px-2" : "text-slate-800"
+                      }`}>
+                        {item.word}
+                      </h4>
                       <span className="text-[10px] font-medium text-slate-400">{item.date} 추가됨</span>
                     </div>
                     <button 
