@@ -15,7 +15,8 @@ import {
   AlertCircle, 
   X,
   Eye,
-  EyeOff
+  EyeOff,
+  Check // 👇 암기 완료 체크 아이콘 추가
 } from "lucide-react";
 
 interface HistoryItem {
@@ -24,6 +25,7 @@ interface HistoryItem {
   correctedText: string;
   nuance: string;
   date: string;
+  isMemorized?: boolean; // 👇 암기 완료 여부 속성 추가
 }
 
 interface Token {
@@ -45,6 +47,7 @@ interface VocabItem {
   meaning: string;
   pos: string;
   date: string;
+  isMemorized?: boolean; // 👇 암기 완료 여부 속성 추가
 }
 
 const MAX_FREE_COUNT = 5;
@@ -56,37 +59,59 @@ export default function Home() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [history, setHistory] = useState<HistoryItem[]>([]);
-  const [showHistory, setShowHistory] = useState(false); //기록장 열림/닫힘 상태
+  const [showHistory, setShowHistory] = useState(false);
 
   const [vocab, setVocab] = useState<VocabItem[]>([]);
   const [showVocab, setShowVocab] = useState(false);
 
-  // 뷰 모드 토글 (false: 일반 텍스트 뷰 / true: 인터랙티브 단어 분해 뷰)
   const [isTokenView, setIsTokenView] = useState(false);
-
-  // 모바일 터치 대응 단어 팝오버 활성화 인덱스
   const [activeTokenIdx, setActiveTokenIdx] = useState<number | null>(null);
 
-  // 무료 사용량 상태
   const [remainingCount, setRemainingCount] = useState<number>(MAX_FREE_COUNT);
   const [showLimitModal, setShowLimitModal] = useState(false);
 
-  // 음성 관련 상태
   const [isPlayingAudio, setIsPlayingAudio] = useState(false);
   const [isRecording, setIsRecording] = useState(false);
   const [spokenText, setSpokenText] = useState("");
   const [pronunciationScore, setPronunciationScore] = useState<number | null>(null);
-
-  // 발음 상세 결과(단어별 일치 여부) 상태 추가
   const [pronunciationDetails, setPronunciationDetails] = useState<{word: string, isMatched: boolean}[] | null>(null);
 
-  // 👇 Day 9: 블라인드(가리기) 모드 상태 추가
   const [isHistoryBlindMode, setIsHistoryBlindMode] = useState(false);
   const [isVocabBlindMode, setIsVocabBlindMode] = useState(false);
   
   const recognitionRef = useRef<any>(null);
 
-  
+  // 👇 추가 1: 개별 음성 듣기 (미니 TTS)
+  const playText = (text: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!("speechSynthesis" in window)) {
+      alert("브라우저가 음성 재생(TTS)을 지원하지 않습니다.");
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = "en-US";
+    utterance.rate = 0.9;
+    window.speechSynthesis.speak(utterance);
+  };
+
+  // 👇 추가 2: 기록장 암기 완료 토글
+  const toggleHistoryMemorized = (id: string) => {
+    const updated = history.map(item => 
+      item.id === id ? { ...item, isMemorized: !item.isMemorized } : item
+    );
+    setHistory(updated);
+    localStorage.setItem('zipil_history', JSON.stringify(updated));
+  };
+
+  // 👇 추가 3: 단어장 암기 완료 토글
+  const toggleVocabMemorized = (id: string) => {
+    const updated = vocab.map(item => 
+      item.id === id ? { ...item, isMemorized: !item.isMemorized } : item
+    );
+    setVocab(updated);
+    localStorage.setItem('zipil_vocab', JSON.stringify(updated));
+  };
 
   // 1. 일일 무료 사용량 로컬스토리지 초기화
   useEffect(() => {
@@ -137,13 +162,10 @@ export default function Home() {
     }
   }, [result]);
 
-  // 3. 발음 일치도 점수 계산 로직 (Day 7 고도화)
+  // 3. 발음 일치도 점수 계산 로직
   const calculateScore = (userSpeech: string) => {
     if (!result) return;
-
-    // 화면 표시용 원문 단어 배열
     const targetWords = result.corrected.split(/\s+/); 
-    // 비교용 정제 단어 배열 (소문자 변환 및 특수기호 제거)
     const cleanTarget = result.corrected.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/);
     const cleanSpoken = userSpeech.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/);
 
@@ -154,13 +176,11 @@ export default function Home() {
       
       if (isMatched) {
         matchCount++;
-        // 매칭된 단어는 사용자 발음 배열에서 제거하여 중복 매칭 방지
         const spokenIdx = cleanSpoken.indexOf(cleanWord);
         if (spokenIdx > -1) {
           cleanSpoken.splice(spokenIdx, 1);
         }
       }
-      
       return { word: originalWord, isMatched };
     });
 
@@ -175,16 +195,13 @@ export default function Home() {
       alert("브라우저가 음성 재생(TTS)을 지원하지 않습니다.");
       return;
     }
-
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(result.corrected);
     utterance.lang = "en-US";
     utterance.rate = 0.9;
-
     utterance.onstart = () => setIsPlayingAudio(true);
     utterance.onend = () => setIsPlayingAudio(false);
     utterance.onerror = () => setIsPlayingAudio(false);
-
     window.speechSynthesis.speak(utterance);
   };
 
@@ -194,7 +211,6 @@ export default function Home() {
       alert("현재 브라우저는 음성 인식을 지원하지 않습니다. Chrome 브라우저를 권장합니다.");
       return;
     }
-
     if (isRecording) {
       recognitionRef.current.stop();
       setIsRecording(false);
@@ -211,24 +227,19 @@ export default function Home() {
     }
   };
 
-  // 6. AI 분석 호출 (유효성 검증 & 에러 핸들링 포함)
+  // 6. AI 분석 호출
   const handleAnalyze = async () => {
     const trimmed = inputText.trim();
     setErrorMessage(null);
 
-    // 유효성 검사 1: 공백 및 최소 길이 체크
     if (!trimmed) {
       setErrorMessage("교정할 문장을 입력해주세요.");
       return;
     }
-
-    // 유효성 검사 2: 최대 글자 수 초과 방지
     if (trimmed.length > MAX_CHAR_LIMIT) {
       setErrorMessage(`최대 ${MAX_CHAR_LIMIT}자 이하로 입력해주세요.`);
       return;
     }
-
-    // 유효성 검사 3: 무료 사용량 확인
     if (remainingCount <= 0) {
       setShowLimitModal(true);
       return;
@@ -254,7 +265,6 @@ export default function Home() {
 
       const data = await res.json();
       setResult(data);
-      
       saveToHistory(trimmed, data.corrected, data.explanation);
 
       const newCount = remainingCount - 1;
@@ -263,18 +273,15 @@ export default function Home() {
 
     } catch (err: any) {
       setErrorMessage(err.message || "문장 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
-      console.error("Analyze Error:", err);
     } finally {
       setLoading(false);
     }
   };
 
-  // 모바일 터치 토글 핸들러
   const handleTokenClick = (idx: number) => {
     setActiveTokenIdx(activeTokenIdx === idx ? null : idx);
   };
 
-  // 컴포넌트 마운트 시 LocalStorage에서 데이터 불러오그
   useEffect(() => {
     const savedHistory = localStorage.getItem('zipil_history');
     if (savedHistory) {
@@ -282,10 +289,9 @@ export default function Home() {
     }
   }, []);
   
-  // 새로운 분석 결과를 히스토리에 저장하는 함수
   const saveToHistory = (original: string, corrected: string, nuance: string) => {
     const newItem: HistoryItem = {
-      id: Date.now().toString(), //고유 ID 부여
+      id: Date.now().toString(),
       originalText: original,
       correctedText: corrected,
       nuance: nuance,
@@ -293,16 +299,11 @@ export default function Home() {
         month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
       })
     };
-
-    //최신 기록이 맨 위로 오도록 배열을 합치고 상태 업데이트
     const updatedHistory = [newItem, ...history];
     setHistory(updatedHistory);
-
-    //브라우저 LocalStorage에 문자열로 변환하여 저장
     localStorage.setItem('zipil_history', JSON.stringify(updatedHistory));
   };
 
-  //지정된 오답노트를 한 번에 삭제
   const clearHistory = () => {
     if (confirm('모든 학습 기록을 삭제하시겠습니까?')) {
       setHistory([]);
@@ -310,7 +311,6 @@ export default function Home() {
     }
   };
 
-  // 컴포넌트 마운트 시 단어장 데이터 불러오기
   useEffect(() => {
     const savedVocab = localStorage.getItem('zipil_vocab');
     if (savedVocab) {
@@ -318,14 +318,11 @@ export default function Home() {
     }
   }, []);
 
-  // 단어장에 추가하는 함수
   const addToVocab = (word: string, meaning: string, pos: string) => {
-    // 중복 방지: 이미 있는 단어면 추가 안 함
     if (vocab.some(v => v.word.toLowerCase() === word.toLowerCase())) {
       alert("이미 단어장에 저장된 단어입니다.");
       return;
     }
-
     const newItem: VocabItem = {
       id: Date.now().toString(),
       word: word,
@@ -333,14 +330,12 @@ export default function Home() {
       pos: pos,
       date: new Date().toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
     };
-
     const updatedVocab = [newItem, ...vocab];
     setVocab(updatedVocab);
     localStorage.setItem('zipil_vocab', JSON.stringify(updatedVocab));
     alert(`'${word}' 단어가 저장되었습니다!`);
   };
 
-  // 단어장에서 특정 단어 삭제 함수
   const removeVocab = (id: string) => {
     const updatedVocab = vocab.filter(item => item.id !== id);
     setVocab(updatedVocab);
@@ -395,7 +390,7 @@ export default function Home() {
         </div>
       </header>
 
-      {/* 워크스페이스 (모바일 1단 세로 / 데스크톱 2단 분할) */}
+      {/* 워크스페이스 */}
       <div className="w-full max-w-4xl grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-6">
         
         {/* 좌측: 문장 입력 카드 */}
@@ -452,7 +447,6 @@ export default function Home() {
         {/* 우측: 분석 및 발음 트레이닝 카드 */}
         <section className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between min-h-[380px] md:min-h-[480px]">
           <div className="space-y-3.5">
-            {/* 상단 컨트롤러 */}
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
                 <CheckCircle2 className="w-4 h-4 text-violet-600" />
@@ -496,7 +490,6 @@ export default function Home() {
 
             {result ? (
               <>
-                {/* 교정 문장 카드 */}
                 <div className="p-3.5 md:p-4 bg-violet-50/40 rounded-xl border border-violet-100/60 space-y-2.5">
                   {isTokenView ? (
                     <div>
@@ -515,8 +508,6 @@ export default function Home() {
                             }`}>
                               {token.word}
                             </span>
-
-                            {/* 데스크톱 Hover 및 모바일 Click 팝오버 동시 대응 */}
                             <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-30 ${
                               activeTokenIdx === idx ? "flex" : "hidden group-hover:flex"
                             } flex-col items-center`}>
@@ -556,13 +547,11 @@ export default function Home() {
                   </p>
                 </div>
 
-                {/* 교정 설명 */}
                 <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100 leading-relaxed">
                   <span className="font-semibold text-slate-700 block mb-0.5">💡 교정 뉘앙스</span>
                   {result.explanation}
                 </div>
 
-                {/* 발음 인식 피드백 (Day 7 고도화) */}
                 {spokenText && (
                   <div className="p-4 rounded-xl border border-slate-200 bg-slate-50/80 space-y-3">
                     <div className="flex items-center justify-between">
@@ -580,7 +569,6 @@ export default function Home() {
                       )}
                     </div>
                     
-                    {/* 단어별 색상 하이라이트 피드백 */}
                     {pronunciationDetails && (
                       <div className="flex flex-wrap gap-1.5 p-3 bg-white rounded-lg border border-slate-100 shadow-sm">
                         {pronunciationDetails.map((item, idx) => (
@@ -598,7 +586,6 @@ export default function Home() {
                       </div>
                     )}
                     
-                    {/* 실제 인식된 음성 텍스트 */}
                     <div className="mt-2 text-xs text-slate-500 flex items-start gap-1.5 bg-white p-2 rounded border border-slate-100">
                       <span className="font-semibold text-slate-600 shrink-0">내 음성:</span>
                       <p className="italic">"{spokenText}"</p>
@@ -614,7 +601,6 @@ export default function Home() {
             )}
           </div>
 
-          {/* 발음 녹음 컨트롤러 */}
           <div className="pt-3 border-t border-slate-100 flex items-center justify-between mt-4">
             <div className="flex items-center gap-2.5">
               <button 
@@ -684,19 +670,18 @@ export default function Home() {
           </div>
         </div>
       )}
-      {/* 👇 학습 기록장 모달 (수정 완료본) */}
+
+      {/* 학습 기록장 모달 */}
       {showHistory && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] flex flex-col shadow-2xl border border-slate-100 relative animate-in fade-in zoom-in-95 duration-150">
             
-            {/* 모달 헤더 */}
             <div className="flex items-center justify-between p-5 border-b border-slate-100">
               <div className="flex items-center gap-4">
                 <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                   <PenTool className="w-5 h-5 text-amber-600" />
                   내 학습 기록장
                 </h3>
-                {/* 블라인드 스위치 */}
                 <button
                   onClick={() => setIsHistoryBlindMode(!isHistoryBlindMode)}
                   className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
@@ -715,7 +700,6 @@ export default function Home() {
               </button>
             </div>
 
-            {/* 모달 바디 (스크롤 영역) */}
             <div className="p-5 overflow-y-auto flex-1 bg-slate-50/50">
               {history.length === 0 ? (
                 <div className="py-12 flex flex-col items-center justify-center text-slate-400">
@@ -724,20 +708,28 @@ export default function Home() {
               ) : (
                 <div className="space-y-4">
                   {history.map((item) => (
-                    <div key={item.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-2">
+                    <div key={item.id} className={`p-4 rounded-xl border shadow-sm flex flex-col gap-2 relative group transition-all duration-300 ${
+                      item.isMemorized ? "bg-slate-100 border-slate-200 opacity-60 grayscale-[50%]" : "bg-white border-slate-200"
+                    }`}>
                       <div className="flex justify-between items-start mb-1">
                         <span className="text-[10px] font-medium text-slate-400">{item.date}</span>
+                        {/* 암기 완료 토글 버튼 */}
+                        <button 
+                          onClick={() => toggleHistoryMemorized(item.id)}
+                          className={`p-1.5 rounded-md transition-colors cursor-pointer ${
+                            item.isMemorized ? "text-emerald-500 bg-emerald-50 opacity-100" : "text-slate-300 hover:text-emerald-500 hover:bg-slate-100 md:opacity-0 group-hover:opacity-100"
+                          }`}
+                          title="암기 완료"
+                        >
+                          <Check className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                       
-                      {/* 1 & 3번 반영: 취소선 제거 및 블라인드 영향 안 받음 (플래시카드 앞면 'Q') */}
-                      <div className="flex items-start gap-1.5">
+                      <div className="flex items-start gap-1.5 -mt-3">
                         <span className="shrink-0 bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded text-[10px] font-bold mt-0.5">Q</span>
-                        <p className="text-xs text-slate-600 font-medium leading-relaxed">
-                          {item.originalText}
-                        </p>
+                        <p className="text-xs text-slate-600 font-medium leading-relaxed">{item.originalText}</p>
                       </div>
 
-                      {/* 3번 반영: 정답 문장만 블라인드 처리 (플래시카드 뒷면 'A') */}
                       <div className="flex items-start gap-1.5 mt-0.5">
                         <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold mt-0.5 transition-colors ${
                           isHistoryBlindMode ? "bg-slate-200 text-slate-400" : "bg-violet-100 text-violet-600"
@@ -747,9 +739,16 @@ export default function Home() {
                         }`}>
                           {item.correctedText}
                         </p>
+                        {/* 미니 TTS 버튼 */}
+                        <button 
+                          onClick={(e) => playText(item.correctedText, e)}
+                          className="shrink-0 p-1.5 text-violet-400 hover:text-violet-600 hover:bg-violet-50 rounded-md transition-colors cursor-pointer"
+                          title="발음 듣기"
+                        >
+                          <Volume2 className="w-4 h-4" />
+                        </button>
                       </div>
 
-                      {/* 2번 반영: 블라인드 모드 시 뉘앙스 노트 숨김 */}
                       {!isHistoryBlindMode && (
                         <div className="mt-1.5 text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 leading-relaxed animate-in fade-in duration-300">
                           <span className="font-semibold text-slate-700 block mb-1">💡 뉘앙스 노트</span>
@@ -762,7 +761,6 @@ export default function Home() {
               )}
             </div>
 
-            {/* 모달 푸터 (초기화 버튼) */}
             {history.length > 0 && (
               <div className="p-4 border-t border-slate-100 flex justify-end">
                 <button
@@ -776,8 +774,8 @@ export default function Home() {
           </div>
         </div>
       )}
-      {/* 👇 새로 추가하는 단어장 사이드바 (Drawer) */}
-      {/* 배경 딤(Dim) 처리 */}
+
+      {/* 단어장 사이드바 */}
       <div 
         className={`fixed inset-0 bg-slate-900/20 backdrop-blur-[2px] z-40 transition-opacity duration-300 ${
           showVocab ? "opacity-100 visible" : "opacity-0 invisible"
@@ -785,19 +783,15 @@ export default function Home() {
         onClick={() => setShowVocab(false)}
       />
 
-      {/* 사이드바 패널 (오른쪽에서 등장) */}
       <div className={`fixed top-0 right-0 h-full w-full md:w-96 bg-slate-50 shadow-2xl z-50 flex flex-col transform transition-transform duration-300 ease-in-out ${
         showVocab ? "translate-x-0" : "translate-x-full"
       }`}>
-        {/* 사이드바 헤더 */}
         <div className="flex items-center justify-between p-5 bg-white border-b border-slate-200">
-          {/* 👇 이 div를 추가했습니다 */}
           <div className="flex items-center gap-4">
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
               <span className="text-lg">📚</span>
               내 단어장
             </h3>
-            {/* 추가된 블라인드 스위치 */}
             <button
               onClick={() => setIsVocabBlindMode(!isVocabBlindMode)}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
@@ -816,7 +810,6 @@ export default function Home() {
           </button>
         </div>
 
-        {/* 사이드바 목록 (스크롤) */}
         <div className="p-4 overflow-y-auto flex-1">
           {vocab.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-2">
@@ -829,29 +822,67 @@ export default function Home() {
           ) : (
             <div className="space-y-3">
               {vocab.map((item) => (
-                <div key={item.id} className="bg-white p-4 rounded-xl border border-slate-200 shadow-sm flex flex-col gap-2 group relative">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h4 className={`text-lg font-bold transition-all duration-300 w-fit ${
-                        isVocabBlindMode ? "text-transparent bg-slate-300 rounded blur-md select-none cursor-help hover:text-slate-800 hover:bg-transparent hover:blur-none px-2" : "text-slate-800"
-                      }`}>
-                        {item.word}
-                      </h4>
-                      <span className="text-[10px] font-medium text-slate-400">{item.date} 추가됨</span>
-                    </div>
+                <div key={item.id} className={`p-4 rounded-xl border shadow-sm flex flex-col gap-2 relative group transition-all duration-300 ${
+                  item.isMemorized ? "bg-slate-100 border-slate-200 opacity-60 grayscale-[50%]" : "bg-white border-slate-200"
+                }`}>
+                  {/* 우측 상단 버튼 그룹 (암기 완료 & 삭제) */}
+                  <div className="absolute top-3 right-3 flex items-center gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={() => toggleVocabMemorized(item.id)}
+                      className={`p-1 rounded-md transition-colors cursor-pointer ${
+                        item.isMemorized ? "text-emerald-500 bg-emerald-50 opacity-100" : "text-slate-300 hover:text-emerald-500 hover:bg-slate-100"
+                      }`}
+                      title="암기 완료"
+                    >
+                      <Check className="w-4 h-4" />
+                    </button>
                     <button 
                       onClick={() => removeVocab(item.id)}
-                      className="text-rose-400 hover:text-rose-600 p-1 md:opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer"
+                      className="text-rose-400 hover:text-rose-600 hover:bg-rose-50 p-1 rounded-md transition-colors cursor-pointer"
                       title="삭제"
                     >
                       <X className="w-4 h-4" />
                     </button>
                   </div>
-                  <div className="flex items-center gap-2 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                    <span className="bg-violet-100 text-violet-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                      {item.pos}
-                    </span>
-                    <span className="text-sm text-slate-700 font-medium">{item.meaning}</span>
+
+                  <div className="flex justify-between items-start mb-1">
+                    <span className="text-[10px] font-medium text-slate-400">{item.date} 추가됨</span>
+                  </div>
+                  
+                  {/* Q: 영단어 */}
+                  <div className="flex items-center gap-1.5 -mt-2">
+                    <span className="shrink-0 bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded text-[10px] font-bold">Q</span>
+                    <h4 className={`text-lg font-bold transition-all ${item.isMemorized ? "text-slate-500 line-through" : "text-slate-800"}`}>
+                      {item.word}
+                    </h4>
+                    {/* 미니 TTS 버튼 */}
+                    <button 
+                      onClick={(e) => playText(item.word, e)}
+                      className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-md transition-colors cursor-pointer ml-1"
+                      title="발음 듣기"
+                    >
+                      <Volume2 className="w-4 h-4" />
+                    </button>
+                  </div>
+
+                  {/* A: 뜻과 품사 */}
+                  <div className="flex items-center gap-2 mt-1">
+                    <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
+                      isVocabBlindMode ? "bg-slate-200 text-slate-400" : "bg-emerald-100 text-emerald-600"
+                    }`}>A</span>
+                    
+                    <div className={`flex items-center gap-2 transition-all duration-300 w-fit bg-slate-50 p-2 rounded-lg border border-slate-100 ${
+                      isVocabBlindMode 
+                        ? "opacity-30 blur-[4px] select-none cursor-help hover:opacity-100 hover:blur-none" 
+                        : ""
+                    }`}>
+                      <span className="bg-violet-100 text-violet-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                        {item.pos}
+                      </span>
+                      <span className={`text-sm font-medium ${item.isMemorized ? "text-slate-400" : "text-slate-700"}`}>
+                        {item.meaning}
+                      </span>
+                    </div>
                   </div>
                 </div>
               ))}
