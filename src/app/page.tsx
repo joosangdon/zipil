@@ -19,6 +19,8 @@ import {
   Check // 👇 암기 완료 체크 아이콘 추가
 } from "lucide-react";
 
+import { supabase } from "@/lib/supabase";
+
 interface HistoryItem {
   id: string;
   originalText: string;
@@ -98,39 +100,70 @@ export default function Home() {
   };
 
   // 👇 추가 2: 기록장 암기 완료 토글
-  const toggleHistoryMemorized = (id: string) => {
-    const updated = history.map(item => 
-      item.id === id ? { ...item, isMemorized: !item.isMemorized } : item
-    );
-    setHistory(updated);
-    localStorage.setItem('zipil_history', JSON.stringify(updated));
+  const toggleVocabMemorized = async (id: string, currentStatus: boolean) => {
+    // 1. DB 먼저 업데이트
+    const { error } = await supabase
+      .from("vocab")
+      .update({ is_memorized: !currentStatus })
+      .eq("id", id);
+    
+    // 2. 에러가 없으면 화면(State)도 업데이트
+    if (!error) {
+      setVocab(vocab.map(item => item.id === id ? { ...item, isMemorized: !currentStatus } : item));
+    }
   };
 
-  // 👇 추가 3: 단어장 암기 완료 토글
-  const toggleVocabMemorized = (id: string) => {
-    const updated = vocab.map(item => 
-      item.id === id ? { ...item, isMemorized: !item.isMemorized } : item
-    );
-    setVocab(updated);
-    localStorage.setItem('zipil_vocab', JSON.stringify(updated));
+  // 👇 기록장 암기 토글 함수 교체
+  const toggleHistoryMemorized = async (id: string, currentStatus: boolean) => {
+    const { error } = await supabase
+      .from("history")
+      .update({ is_memorized: !currentStatus })
+      .eq("id", id);
+    
+    if (!error) {
+      setHistory(history.map(item => item.id === id ? { ...item, isMemorized: !currentStatus } : item));
+    }
   };
 
   // 1. 일일 무료 사용량 로컬스토리지 초기화
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const today = new Date().toISOString().split("T")[0];
-      const savedDate = localStorage.getItem("zipil_usage_date");
-      const savedCount = localStorage.getItem("zipil_remaining_count");
-
-      if (savedDate !== today) {
-        localStorage.setItem("zipil_usage_date", today);
-        localStorage.setItem("zipil_remaining_count", MAX_FREE_COUNT.toString());
-        setRemainingCount(MAX_FREE_COUNT);
-      } else if (savedCount !== null) {
-        setRemainingCount(parseInt(savedCount, 10));
-      }
-    }
+    fetchVocab();
+    fetchHistory();
+    // (주의: 남은 무료 횟수(remainingCount)를 불러오는 로컬스토리지 로직이 있다면 그건 그대로 남겨두세요!)
   }, []);
+
+  // 단어장 DB에서 가져오기
+  const fetchVocab = async () => {
+    const { data, error } = await supabase.from("vocab").select("*").order("created_at", { ascending: false });
+    if (data) {
+      // DB의 데이터(is_memorized)를 프론트엔드 화면(isMemorized)에 맞게 변환
+      const formatted = data.map((item: any) => ({
+id: item.id,
+        word: item.word,      
+        meaning: item.meaning, 
+        pos: item.pos,         
+        date: item.date,
+        isMemorized: item.is_memorized
+      }));
+      setVocab(formatted);
+    }
+  };
+
+  // 기록장 DB에서 가져오기
+  const fetchHistory = async () => {
+    const { data, error } = await supabase.from("history").select("*").order("created_at", { ascending: false });
+    if (data) {
+      const formatted = data.map((item: any) => ({
+        id: item.id,
+        originalText: item.original_text,
+        correctedText: item.corrected_text,
+        nuance: item.nuance,
+        date: item.date,
+        isMemorized: item.is_memorized
+      }));
+      setHistory(formatted);
+    }
+  };
 
   // 2. Web Speech API (STT) 초기화
   useEffect(() => {
@@ -294,25 +327,44 @@ export default function Home() {
     }
   }, []);
   
-  const saveToHistory = (original: string, corrected: string, nuance: string) => {
-    const newItem: HistoryItem = {
-      id: Date.now().toString(),
-      originalText: original,
-      correctedText: corrected,
-      nuance: nuance,
-      date: new Date().toLocaleDateString('ko-KR', {
-        month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-      })
-    };
-    const updatedHistory = [newItem, ...history];
-    setHistory(updatedHistory);
-    localStorage.setItem('zipil_history', JSON.stringify(updatedHistory));
+  // 기록장에 새 분석 결과 저장하기 (DB Insert)
+  const saveToHistory = async (original: string, corrected: string, nuance: string) => {
+    const dateStr = new Date().toLocaleDateString('ko-KR', {
+      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+    });
+
+    const { data, error } = await supabase
+      .from("history")
+      .insert([{
+        original_text: original,
+        corrected_text: corrected,
+        nuance: nuance,
+        date: dateStr,
+        is_memorized: false
+      }])
+      .select(); // 저장된 데이터를 다시 가져옴 (id 등을 화면에 그리기 위해)
+
+    if (data && !error) {
+      const newItem: HistoryItem = {
+        id: data[0].id,
+        originalText: data[0].original_text,
+        correctedText: data[0].corrected_text,
+        nuance: data[0].nuance,
+        date: data[0].date,
+        isMemorized: data[0].is_memorized
+      };
+      setHistory([newItem, ...history]); // 화면 업데이트
+    }
   };
 
-  const clearHistory = () => {
+  // 기록장 전체 비우기 (DB Delete)
+  const clearHistory = async () => {
     if (confirm('모든 학습 기록을 삭제하시겠습니까?')) {
-      setHistory([]);
-      localStorage.removeItem('zipil_history');
+      // Supabase에서 전체 삭제를 위해 조건(id가 null이 아닌 것)을 줍니다.
+      const { error } = await supabase.from("history").delete().not("id", "is", null);
+      if (!error) {
+        setHistory([]);
+      }
     }
   };
 
@@ -323,28 +375,58 @@ export default function Home() {
     }
   }, []);
 
-  const addToVocab = (word: string, meaning: string, pos: string) => {
+  // 단어장에 새 단어 추가하기 (DB Insert - 에러 추적 포함)
+  const addToVocab = async (word: string, meaning: string, pos: string) => {
     if (vocab.some(v => v.word.toLowerCase() === word.toLowerCase())) {
       alert("이미 단어장에 저장된 단어입니다.");
       return;
     }
-    const newItem: VocabItem = {
-      id: Date.now().toString(),
-      word: word,
-      meaning: meaning,
-      pos: pos,
-      date: new Date().toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
-    };
-    const updatedVocab = [newItem, ...vocab];
-    setVocab(updatedVocab);
-    localStorage.setItem('zipil_vocab', JSON.stringify(updatedVocab));
-    alert(`'${word}' 단어가 저장되었습니다!`);
+    
+    const dateStr = new Date().toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+
+    try {
+      const { data, error } = await supabase
+        .from("vocab")
+        .insert([{
+          word: word,
+          meaning: meaning,
+          pos: pos,
+          date: dateStr,
+          is_memorized: false
+        }])
+        .select();
+
+      // 👇 에러가 발생하면 화면에 팝업을 띄우도록 추가
+      if (error) {
+        console.error("단어 추가 에러:", error);
+        alert(`DB 에러: ${error.message}`);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        const newItem: VocabItem = {
+          id: data[0].id,
+          word: data[0].word,
+          meaning: data[0].meaning,
+          pos: data[0].pos,
+          date: data[0].date,
+          isMemorized: data[0].is_memorized
+        };
+        setVocab([newItem, ...vocab]);
+        alert(`'${word}' 단어가 저장되었습니다!`);
+      }
+    } catch (err) {
+      console.error("통신 에러:", err);
+      alert("서버와 통신하는 중 문제가 발생했습니다.");
+    }
   };
 
-  const removeVocab = (id: string) => {
-    const updatedVocab = vocab.filter(item => item.id !== id);
-    setVocab(updatedVocab);
-    localStorage.setItem('zipil_vocab', JSON.stringify(updatedVocab));
+  // 단어장에서 단어 삭제하기 (DB Delete)
+  const removeVocab = async (id: string) => {
+    const { error } = await supabase.from("vocab").delete().eq("id", id);
+    if (!error) {
+      setVocab(vocab.filter(item => item.id !== id));
+    }
   };
 
   return (
@@ -733,7 +815,7 @@ export default function Home() {
                         <span className="text-[10px] font-medium text-slate-400">{item.date}</span>
                         {/* 암기 완료 토글 버튼 */}
                         <button 
-                          onClick={() => toggleHistoryMemorized(item.id)}
+                          onClick={() => toggleHistoryMemorized(item.id, item.isMemorized || false)}
                           className={`p-1.5 rounded-md transition-colors cursor-pointer ${
                             item.isMemorized ? "text-emerald-500 bg-emerald-50 opacity-100" : "text-slate-300 hover:text-emerald-500 hover:bg-slate-100 md:opacity-0 group-hover:opacity-100"
                           }`}
@@ -846,7 +928,7 @@ export default function Home() {
                   {/* 우측 상단 버튼 그룹 (암기 완료 & 삭제) */}
                   <div className="absolute top-3 right-3 flex items-center gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
                     <button 
-                      onClick={() => toggleVocabMemorized(item.id)}
+                      onClick={() => toggleVocabMemorized(item.id, item.isMemorized || false)}
                       className={`p-1 rounded-md transition-colors cursor-pointer ${
                         item.isMemorized ? "text-emerald-500 bg-emerald-50 opacity-100" : "text-slate-300 hover:text-emerald-500 hover:bg-slate-100"
                       }`}
