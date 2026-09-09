@@ -82,8 +82,34 @@ export default function Home() {
   const [isVocabBlindMode, setIsVocabBlindMode] = useState(false);
 
   const [ttsRate, setTtsRate] = useState<number>(1.0);
-  
   const recognitionRef = useRef<any>(null);
+
+  const [user, setUser] = useState<any>(null);
+
+  useEffect(() => {
+    // 1. 첫 렌더링 시 현재 로그인된 세션 확인
+    const getUserSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setUser(session.user);
+      }
+    };
+    getUserSession();
+
+    // 2. 로그인/로그아웃 상태 변화 실시간 감지
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    window.location.href = '/login'; //
+  };
 
   // 👇 추가 1: 개별 음성 듣기 (미니 TTS)
   const playText = (text: string, e: React.MouseEvent) => {
@@ -474,6 +500,36 @@ id: item.id,
           }`}>
             오늘 무료 {remainingCount}/{MAX_FREE_COUNT}
           </span>
+          <div className="h-4 w-px bg-slate-200 mx-1 hidden md:block"></div> {/* 구분선 */}
+          
+          {user ? (
+            <div className="flex items-center gap-2 bg-white p-1 pr-3 rounded-full border border-slate-200 shadow-sm shrink-0">
+              <img 
+                src={user.user_metadata.avatar_url} 
+                alt="프로필" 
+                className="w-7 h-7 md:w-8 md:h-8 rounded-full border border-slate-100"
+                referrerPolicy="no-referrer"
+              />
+              <div className="flex flex-col hidden sm:flex">
+                <span className="text-[10px] md:text-xs font-bold text-slate-700 leading-none mb-0.5 max-w-[80px] truncate">
+                  {user.user_metadata.full_name}
+                </span>
+                <button 
+                  onClick={handleLogout} 
+                  className="text-[9px] md:text-[10px] text-slate-400 hover:text-rose-500 text-left leading-none transition-colors cursor-pointer"
+                >
+                  로그아웃
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button 
+              onClick={() => window.location.href = '/login'}
+              className="px-3 py-1.5 md:px-4 md:py-1.5 bg-slate-900 text-white text-xs font-bold rounded-full hover:bg-slate-800 transition-colors shadow-sm shrink-0 cursor-pointer"
+            >
+              로그인
+            </button>
+          )}
         </div>
       </header>
 
@@ -591,6 +647,11 @@ id: item.id,
             {result ? (
               <>
                 <div className="p-3.5 md:p-4 bg-violet-50/40 rounded-xl border border-violet-100/60 space-y-2.5">
+                  <p className="text-xs font-medium text-violet-700/90 pb-3 mb-3 border-b border-violet-200/50 flex items-center gap-1.5">
+                    <span className="text-[10px] bg-violet-200/70 text-violet-800 px-1.5 py-0.5 rounded font-bold">완역</span>
+                    {result.korean_translation}
+                  </p>
+                  
                   {isTokenView ? (
                     <div>
                       <p className="text-[11px] font-medium text-violet-500 mb-2">단어를 누르거나 마우스를 올리면 뜻이 나타납니다</p>
@@ -640,11 +701,6 @@ id: item.id,
                       </p>
                     </div>
                   )}
-
-                  <p className="text-xs font-medium text-violet-700/90 pt-2 border-t border-violet-200/50 flex items-center gap-1.5">
-                    <span className="text-[10px] bg-violet-200/70 text-violet-800 px-1.5 py-0.5 rounded font-bold">완역</span>
-                    {result.korean_translation}
-                  </p>
                 </div>
 
                 <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100 leading-relaxed">
