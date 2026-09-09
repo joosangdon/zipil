@@ -1,10 +1,15 @@
-"use client"; // 접힘/펼침 상태 관리를 위해 클라이언트 컴포넌트로 선언
+"use client";
 
 import React, { useState } from 'react';
 import { Home, Gamepad2, BarChart2, ChevronLeft } from 'lucide-react';
+import Link from 'next/link';
+import { usePathname } from 'next/navigation'; // 현재 주소를 알아내는 훅
 
 export default function Sidebar() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const pathname = usePathname(); // 현재 URL 경로를 가져옵니다 (예: '/' 또는 '/quiz')
+
+  if (pathname === '/login') return null; 
 
   return (
     <aside 
@@ -12,7 +17,6 @@ export default function Sidebar() {
         isSidebarCollapsed ? "w-16" : "w-60"
       }`}
     >
-      {/* 토글 버튼 */}
       <button 
         onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
         className="absolute -right-3 top-8 bg-slate-800 text-white rounded-full p-1 border border-slate-700 hover:bg-slate-700 shadow-md cursor-pointer transition-transform z-50"
@@ -20,7 +24,6 @@ export default function Sidebar() {
         <ChevronLeft className={`w-4 h-4 transition-transform duration-300 ${isSidebarCollapsed ? "rotate-180" : ""}`} />
       </button>
 
-      {/* 로고 영역 */}
       <div className="h-20 flex items-center justify-center border-b border-slate-800">
         {isSidebarCollapsed ? (
           <span className="font-black text-amber-500 text-xl tracking-tighter">ㅈㅍ</span>
@@ -31,22 +34,44 @@ export default function Sidebar() {
         )}
       </div>
 
-      {/* 메뉴 리스트 */}
       <nav className="flex-1 py-6 flex flex-col gap-2 px-3">
-        <button className={`flex items-center gap-3 px-3 py-3 rounded-xl bg-slate-800/80 text-amber-400 transition-colors cursor-pointer ${isSidebarCollapsed ? "justify-center" : ""}`}>
+        {/* 버튼(button) 대신 링크(Link) 사용. 현재 경로(pathname)에 따라 색상이 바뀝니다. */}
+        <Link 
+          href="/" 
+          className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
+            pathname === '/' 
+              ? "bg-slate-800/80 text-amber-400 font-semibold" 
+              : "hover:bg-slate-800/50 hover:text-white text-slate-400 font-medium"
+          } ${isSidebarCollapsed ? "justify-center" : ""}`}
+        >
           <Home className="w-5 h-5 shrink-0" />
-          {!isSidebarCollapsed && <span className="text-sm font-semibold whitespace-nowrap">홈 (교정)</span>}
-        </button>
+          {!isSidebarCollapsed && <span className="text-sm whitespace-nowrap">홈 (교정)</span>}
+        </Link>
 
-        <button className={`flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-slate-800/50 hover:text-white transition-colors cursor-pointer ${isSidebarCollapsed ? "justify-center" : ""}`}>
+        <Link 
+          href="/quiz" 
+          className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
+            pathname === '/quiz' 
+              ? "bg-slate-800/80 text-amber-400 font-semibold" 
+              : "hover:bg-slate-800/50 hover:text-white text-slate-400 font-medium"
+          } ${isSidebarCollapsed ? "justify-center" : ""}`}
+        >
           <Gamepad2 className="w-5 h-5 shrink-0" />
-          {!isSidebarCollapsed && <span className="text-sm font-medium whitespace-nowrap">단어 퀴즈</span>}
-        </button>
+          {!isSidebarCollapsed && <span className="text-sm whitespace-nowrap">단어 퀴즈</span>}
+        </Link>
 
-        <button className={`flex items-center gap-3 px-3 py-3 rounded-xl hover:bg-slate-800/50 hover:text-white transition-colors cursor-pointer ${isSidebarCollapsed ? "justify-center" : ""}`}>
+        {/* 통계 페이지는 아직 안 만들었으므로 href를 "#"으로 임시 처리 */}
+        <Link 
+          href="#" 
+          className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
+            pathname === '/stats' 
+              ? "bg-slate-800/80 text-amber-400 font-semibold" 
+              : "hover:bg-slate-800/50 hover:text-white text-slate-400 font-medium"
+          } ${isSidebarCollapsed ? "justify-center" : ""}`}
+        >
           <BarChart2 className="w-5 h-5 shrink-0" />
-          {!isSidebarCollapsed && <span className="text-sm font-medium whitespace-nowrap">학습 통계</span>}
-        </button>
+          {!isSidebarCollapsed && <span className="text-sm whitespace-nowrap">학습 통계</span>}
+        </Link>
       </nav>
     </aside>
   );
