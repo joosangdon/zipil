@@ -1,13 +1,18 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Home, Gamepad2, BarChart2, ChevronLeft } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation'; // 현재 주소를 알아내는 훅
 
 export default function Sidebar() {
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
   const pathname = usePathname(); // 현재 URL 경로를 가져옵니다 (예: '/' 또는 '/quiz')
+
+  // 탭(주소)을 이동할 때마다 무조건 사이드바를 닫아주는 안전장치 추가!
+  useEffect(() => {
+    setIsSidebarCollapsed(true);
+  }, [pathname]);
 
   if (pathname === '/login') return null; 
 
@@ -26,7 +31,7 @@ export default function Sidebar() {
 
       <div className="h-20 flex items-center justify-center border-b border-slate-800">
         {isSidebarCollapsed ? (
-          <span className="font-black text-amber-500 text-xl tracking-tighter">ㅈㅍ</span>
+          <span className="font-black text-amber-500 text-base tracking-tighter whitespace-nowrap">ㅈㅍㅈ</span>
         ) : (
           <span className="font-bold text-white text-lg tracking-wide flex items-center gap-2">
             <span className="text-amber-500 font-black">ㅈㅍㅈ</span> 집필중
@@ -60,10 +65,9 @@ export default function Sidebar() {
           {!isSidebarCollapsed && <span className="text-sm whitespace-nowrap">단어 퀴즈</span>}
         </Link>
 
-        {/* 통계 페이지는 아직 안 만들었으므로 href를 "#"으로 임시 처리 */}
+        {/* 통계 페이지*/}
         <Link 
-          href="#" 
-          className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
+          href="/stats" className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
             pathname === '/stats' 
               ? "bg-slate-800/80 text-amber-400 font-semibold" 
               : "hover:bg-slate-800/50 hover:text-white text-slate-400 font-medium"

@@ -1,18 +1,18 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
-import { 
-  Sparkles, 
-  Volume2, 
-  Mic, 
-  Square, 
-  CheckCircle2, 
-  PenTool, 
-  Loader2, 
-  RefreshCw, 
-  ToggleLeft, 
-  ToggleRight, 
-  AlertCircle, 
+import {
+  Sparkles,
+  Volume2,
+  Mic,
+  Square,
+  CheckCircle2,
+  PenTool,
+  Loader2,
+  RefreshCw,
+  ToggleLeft,
+  ToggleRight,
+  AlertCircle,
   X,
   Eye,
   EyeOff,
@@ -20,11 +20,13 @@ import {
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
+import { useRouter } from 'next/navigation';
 
 interface HistoryItem {
   id: string;
   originalText: string;
   correctedText: string;
+  koreanTranslation?: string;
   nuance: string;
   date: string;
   isMemorized?: boolean; // 👇 암기 완료 여부 속성 추가
@@ -56,6 +58,8 @@ const MAX_FREE_COUNT = 5;
 const MAX_CHAR_LIMIT = 300;
 
 export default function Home() {
+  const router = useRouter();
+
   const [inputText, setInputText] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<AnalysisResult | null>(null);
@@ -76,7 +80,7 @@ export default function Home() {
   const [isRecording, setIsRecording] = useState(false);
   const [spokenText, setSpokenText] = useState("");
   const [pronunciationScore, setPronunciationScore] = useState<number | null>(null);
-  const [pronunciationDetails, setPronunciationDetails] = useState<{word: string, isMatched: boolean}[] | null>(null);
+  const [pronunciationDetails, setPronunciationDetails] = useState<{ word: string, isMatched: boolean }[] | null>(null);
 
   const [isHistoryBlindMode, setIsHistoryBlindMode] = useState(false);
   const [isVocabBlindMode, setIsVocabBlindMode] = useState(false);
@@ -92,6 +96,9 @@ export default function Home() {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
         setUser(session.user);
+      } else {
+        // 👇 2. 세션(로그인 정보)이 없으면 로그인 페이지로 강제 이동
+        router.push('/login');
       }
     };
     getUserSession();
@@ -99,16 +106,41 @@ export default function Home() {
     // 2. 로그인/로그아웃 상태 변화 실시간 감지
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       setUser(session?.user || null);
+      // 👇 3. 만약 도중에 로그아웃을 하거나 세션이 만료되면 튕겨내기
+      if (event === 'SIGNED_OUT' || !session) {
+        router.push('/login');
+      }
     });
 
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, []);
+  }, [router]); // 👈 의존성 배열에 router 추가
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
     window.location.href = '/login'; //
+  };
+  // YYYY-MM-DD HH:MM:SS 포맷으로 깎아주는 함수
+  const formatDateTime = (dateVal: string | Date) => {
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return String(dateVal); // 혹시 모를 에러 방어
+
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  };
+
+  // 👇 AI가 뱉은 영어 품사를 한국어로 강제 변환하는 안전장치 함수
+  const translatePOS = (pos: string) => {
+    const p = pos.toLowerCase();
+    if (p.includes('verb')) return '동사';
+    if (p.includes('noun')) return '명사';
+    if (p.includes('adj')) return '형용사'; // adjective 포함
+    if (p.includes('adv')) return '부사';   // adverb 포함
+    if (p.includes('prep')) return '전치사'; // preposition 포함
+    if (p.includes('conj')) return '접속사'; // conjunction 포함
+    if (p.includes('pron')) return '대명사'; // pronoun 포함
+    return pos; // 매칭 안 되면 원래 값 그대로
   };
 
   // 👇 추가 1: 개별 음성 듣기 (미니 TTS)
@@ -132,7 +164,7 @@ export default function Home() {
       .from("vocab")
       .update({ is_memorized: !currentStatus })
       .eq("id", id);
-    
+
     // 2. 에러가 없으면 화면(State)도 업데이트
     if (!error) {
       setVocab(vocab.map(item => item.id === id ? { ...item, isMemorized: !currentStatus } : item));
@@ -145,7 +177,7 @@ export default function Home() {
       .from("history")
       .update({ is_memorized: !currentStatus })
       .eq("id", id);
-    
+
     if (!error) {
       setHistory(history.map(item => item.id === id ? { ...item, isMemorized: !currentStatus } : item));
     }
@@ -156,19 +188,36 @@ export default function Home() {
     fetchVocab();
     fetchHistory();
     // (주의: 남은 무료 횟수(remainingCount)를 불러오는 로컬스토리지 로직이 있다면 그건 그대로 남겨두세요!)
+
+    // 👇 저장된 날짜와 횟수 꺼내오기 로직 추가
+    const savedDate = localStorage.getItem("zipil_date");
+    const today = new Date().toLocaleDateString();
+
+    if (savedDate === today) {
+      // 접속한 날짜가 오늘과 같다면, 저장된 횟수를 그대로 불러옴
+      const savedCount = localStorage.getItem("zipil_remaining_count");
+      if (savedCount !== null) {
+        setRemainingCount(parseInt(savedCount, 10));
+      }
+    } else {
+      // 처음 접속했거나 날짜가 바뀌었다면(자정 지남), 5회로 가득 채우고 오늘 날짜 갱신
+      setRemainingCount(MAX_FREE_COUNT);
+      localStorage.setItem("zipil_remaining_count", MAX_FREE_COUNT.toString());
+      localStorage.setItem("zipil_date", today);
+    }
   }, []);
 
   // 단어장 DB에서 가져오기
   const fetchVocab = async () => {
     const { data, error } = await supabase.from("vocab").select("*").order("created_at", { ascending: false });
     if (data) {
-      // DB의 데이터(is_memorized)를 프론트엔드 화면(isMemorized)에 맞게 변환
       const formatted = data.map((item: any) => ({
-id: item.id,
-        word: item.word,      
-        meaning: item.meaning, 
-        pos: item.pos,         
-        date: item.date,
+        id: item.id,
+        word: item.word,
+        meaning: item.meaning,
+        pos: item.pos,
+        // 👇 item.date 대신, DB 고유 시간인 created_at을 포맷팅하여 사용!
+        date: item.created_at ? formatDateTime(item.created_at) : formatDateTime(item.date),
         isMemorized: item.is_memorized
       }));
       setVocab(formatted);
@@ -183,6 +232,7 @@ id: item.id,
         id: item.id,
         originalText: item.original_text,
         correctedText: item.corrected_text,
+        koreanTranslation: item.korean_translation,
         nuance: item.nuance,
         date: item.date,
         isMemorized: item.is_memorized
@@ -226,7 +276,7 @@ id: item.id,
   // 3. 발음 일치도 점수 계산 로직
   const calculateScore = (userSpeech: string) => {
     if (!result) return;
-    const targetWords = result.corrected.split(/\s+/); 
+    const targetWords = result.corrected.split(/\s+/);
     const cleanTarget = result.corrected.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/);
     const cleanSpoken = userSpeech.toLowerCase().replace(/[^a-z0-9\s]/g, "").split(/\s+/);
 
@@ -234,7 +284,7 @@ id: item.id,
     const details = targetWords.map((originalWord, index) => {
       const cleanWord = cleanTarget[index];
       const isMatched = cleanSpoken.includes(cleanWord);
-      
+
       if (isMatched) {
         matchCount++;
         const spokenIdx = cleanSpoken.indexOf(cleanWord);
@@ -329,7 +379,7 @@ id: item.id,
 
       const data = await res.json();
       setResult(data);
-      saveToHistory(trimmed, data.corrected, data.explanation);
+      saveToHistory(trimmed, data.corrected, data.korean_translation, data.explanation);
 
       const newCount = remainingCount - 1;
       setRemainingCount(newCount);
@@ -352,18 +402,17 @@ id: item.id,
       setHistory(JSON.parse(savedHistory));
     }
   }, []);
-  
+
   // 기록장에 새 분석 결과 저장하기 (DB Insert)
-  const saveToHistory = async (original: string, corrected: string, nuance: string) => {
-    const dateStr = new Date().toLocaleDateString('ko-KR', {
-      month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
-    });
+  const saveToHistory = async (original: string, corrected: string, koreanTranslation: string, nuance: string) => {
+    const dateStr = formatDateTime(new Date());
 
     const { data, error } = await supabase
       .from("history")
       .insert([{
         original_text: original,
         corrected_text: corrected,
+        korean_translation: koreanTranslation,
         nuance: nuance,
         date: dateStr,
         is_memorized: false
@@ -375,6 +424,7 @@ id: item.id,
         id: data[0].id,
         originalText: data[0].original_text,
         correctedText: data[0].corrected_text,
+        koreanTranslation: data[0].korean_translation,
         nuance: data[0].nuance,
         date: data[0].date,
         isMemorized: data[0].is_memorized
@@ -401,14 +451,15 @@ id: item.id,
     }
   }, []);
 
-  // 단어장에 새 단어 추가하기 (DB Insert - 에러 추적 포함)
+  // 단어장에 새 단어 추가하기
   const addToVocab = async (word: string, meaning: string, pos: string) => {
     if (vocab.some(v => v.word.toLowerCase() === word.toLowerCase())) {
       alert("이미 단어장에 저장된 단어입니다.");
       return;
     }
-    
-    const dateStr = new Date().toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' });
+
+    const dateStr = formatDateTime(new Date());
+    const koreanPos = translatePOS(pos);
 
     try {
       const { data, error } = await supabase
@@ -416,7 +467,8 @@ id: item.id,
         .insert([{
           word: word,
           meaning: meaning,
-          pos: pos,
+          pos: koreanPos,
+          //pos: pos,
           date: dateStr,
           is_memorized: false
         }])
@@ -456,7 +508,7 @@ id: item.id,
   };
 
   return (
-    <main 
+    <main
       className="min-h-screen bg-[#FAF9F6] text-slate-800 flex flex-col items-center px-4 py-6 md:p-12 relative"
       onClick={() => setActiveTokenIdx(null)}
     >
@@ -472,7 +524,7 @@ id: item.id,
           </div>
         </div>
         <div className="flex items-center gap-2">
-        <button
+          <button
             onClick={() => setShowVocab(true)}
             className="text-xs font-semibold px-2.5 py-1 md:px-3 md:py-1.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 transition-colors flex items-center gap-1 cursor-pointer"
           >
@@ -483,30 +535,29 @@ id: item.id,
               </span>
             )}
           </button>
-        <button
-          onClick={() => setShowHistory(true)}
-          className="text-xs font-semibold px-2.5 py-1 md:px-3 md:py-1.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 transition-colors flex items-center gap-1 cursor-pointer">
-          <span>기록장</span>
-          {history.length > 0 && (
-            <span className="bg-slate-800 text-white text-[10px] px-1.5 rounded-full">
-            {history.length}
-            </span>
-          )}
+          <button
+            onClick={() => setShowHistory(true)}
+            className="text-xs font-semibold px-2.5 py-1 md:px-3 md:py-1.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 transition-colors flex items-center gap-1 cursor-pointer">
+            <span>기록장</span>
+            {history.length > 0 && (
+              <span className="bg-slate-800 text-white text-[10px] px-1.5 rounded-full">
+                {history.length}
+              </span>
+            )}
           </button>
-          <span className={`text-xs font-semibold px-2.5 py-1 md:px-3 md:py-1.5 rounded-full border transition-colors ${
-            remainingCount > 0 
+          <span className={`text-xs font-semibold px-2.5 py-1 md:px-3 md:py-1.5 rounded-full border transition-colors ${remainingCount > 0
               ? "bg-violet-100 text-violet-700 border-violet-200"
               : "bg-rose-100 text-rose-700 border-rose-200 animate-pulse"
-          }`}>
+            }`}>
             오늘 무료 {remainingCount}/{MAX_FREE_COUNT}
           </span>
           <div className="h-4 w-px bg-slate-200 mx-1 hidden md:block"></div> {/* 구분선 */}
-          
+
           {user ? (
             <div className="flex items-center gap-2 bg-white p-1 pr-3 rounded-full border border-slate-200 shadow-sm shrink-0">
-              <img 
-                src={user.user_metadata.avatar_url} 
-                alt="프로필" 
+              <img
+                src={user.user_metadata.avatar_url}
+                alt="프로필"
                 className="w-7 h-7 md:w-8 md:h-8 rounded-full border border-slate-100"
                 referrerPolicy="no-referrer"
               />
@@ -514,8 +565,8 @@ id: item.id,
                 <span className="text-[10px] md:text-xs font-bold text-slate-700 leading-none mb-0.5 max-w-[80px] truncate">
                   {user.user_metadata.full_name}
                 </span>
-                <button 
-                  onClick={handleLogout} 
+                <button
+                  onClick={handleLogout}
                   className="text-[9px] md:text-[10px] text-slate-400 hover:text-rose-500 text-left leading-none transition-colors cursor-pointer"
                 >
                   로그아웃
@@ -523,7 +574,7 @@ id: item.id,
               </div>
             </div>
           ) : (
-            <button 
+            <button
               onClick={() => window.location.href = '/login'}
               className="px-3 py-1.5 md:px-4 md:py-1.5 bg-slate-900 text-white text-xs font-bold rounded-full hover:bg-slate-800 transition-colors shadow-sm shrink-0 cursor-pointer"
             >
@@ -535,7 +586,7 @@ id: item.id,
 
       {/* 👇 2. 워크스페이스 가로폭 및 간격 확장 (max-w-5xl, md:gap-8) */}
       <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8">
-        
+
         {/* 👇 3. 좌측 카드 패딩 및 높이 확장 (md:p-8, md:min-h-[600px]) */}
         <section className="bg-white p-5 md:p-8 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between min-h-[380px] md:min-h-[600px]">
           <div>
@@ -551,11 +602,10 @@ id: item.id,
 
             {/* 👇 4. 텍스트 입력창 높이 및 패딩 확장 (md:h-80, md:p-5) */}
             <textarea
-              className={`w-full h-48 md:h-80 p-3.5 md:p-5 rounded-xl border focus:outline-hidden focus:ring-2 resize-none text-slate-800 text-sm leading-relaxed placeholder:text-slate-400 bg-slate-50/50 transition-all ${
-                inputText.length > MAX_CHAR_LIMIT 
-                  ? "border-rose-300 focus:ring-rose-200" 
+              className={`w-full h-48 md:h-80 p-3.5 md:p-5 rounded-xl border focus:outline-hidden focus:ring-2 resize-none text-slate-800 text-sm leading-relaxed placeholder:text-slate-400 bg-slate-50/50 transition-all ${inputText.length > MAX_CHAR_LIMIT
+                  ? "border-rose-300 focus:ring-rose-200"
                   : "border-slate-200 focus:ring-amber-300 focus:border-transparent"
-              }`}
+                }`}
               placeholder="영어로 표현하고 싶은 문장이나 교정받고 싶은 영어를 입력하세요..."
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
@@ -594,7 +644,7 @@ id: item.id,
             {/* 상단 컨트롤러 */}
             {/* 👇 justify-between을 justify-end로 변경하여 버튼들을 우측으로 깔끔하게 밀어줍니다 */}
             <div className="flex items-center justify-end border-b border-slate-100 pb-3 min-h-[44px]">
-              
+
               {/* 덩그러니 있던 체크 아이콘 영역은 완전히 삭제했습니다! */}
 
               <div className="flex items-center gap-1.5 md:gap-2">
@@ -627,14 +677,13 @@ id: item.id,
                       <option value={0.5}>0.5x</option>
                     </select>
 
-                    <button 
+                    <button
                       onClick={handlePlayTTS}
                       disabled={isPlayingAudio}
-                      className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-md transition-all active:scale-95 whitespace-nowrap ${
-                        isPlayingAudio 
-                          ? "bg-amber-100 text-amber-800 border border-amber-300 animate-pulse" 
+                      className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-md transition-all active:scale-95 whitespace-nowrap ${isPlayingAudio
+                          ? "bg-amber-100 text-amber-800 border border-amber-300 animate-pulse"
                           : "bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200"
-                      }`}
+                        }`}
                     >
                       <Volume2 className="w-3.5 h-3.5" />
                       {isPlayingAudio ? "재생 중" : "발음 듣기"}
@@ -651,30 +700,28 @@ id: item.id,
                     <span className="text-[10px] bg-violet-200/70 text-violet-800 px-1.5 py-0.5 rounded font-bold">완역</span>
                     {result.korean_translation}
                   </p>
-                  
+
                   {isTokenView ? (
                     <div>
                       <p className="text-[11px] font-medium text-violet-500 mb-2">단어를 누르거나 마우스를 올리면 뜻이 나타납니다</p>
                       <div className="flex flex-wrap gap-1.5 md:gap-2 text-slate-900 font-medium leading-relaxed">
                         {result.tokens.map((token, idx) => (
-                          <div 
-                            key={idx} 
+                          <div
+                            key={idx}
                             className="relative group inline-block"
                             onClick={(e) => { e.stopPropagation(); handleTokenClick(idx); }}
                           >
-                            <span className={`cursor-pointer px-2 py-1 rounded-lg border text-sm font-semibold transition-all shadow-2xs block ${
-                              activeTokenIdx === idx 
-                                ? "bg-violet-600 text-white border-violet-600" 
+                            <span className={`cursor-pointer px-2 py-1 rounded-lg border text-sm font-semibold transition-all shadow-2xs block ${activeTokenIdx === idx
+                                ? "bg-violet-600 text-white border-violet-600"
                                 : "bg-white group-hover:bg-violet-600 group-hover:text-white text-slate-800 border-slate-200"
-                            }`}>
+                              }`}>
                               {token.word}
                             </span>
-                            <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-30 ${
-                              activeTokenIdx === idx ? "flex" : "hidden group-hover:flex"
-                            } flex-col items-center`}>
+                            <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-30 ${activeTokenIdx === idx ? "flex" : "hidden group-hover:flex"
+                              } flex-col items-center`}>
                               <div className="bg-slate-900 text-white text-xs rounded-lg py-1.5 px-2.5 shadow-xl whitespace-nowrap flex items-center gap-1.5 border border-slate-700">
                                 <span className="bg-violet-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
-                                  {token.pos}
+                                  {translatePOS(token.pos)}
                                 </span>
                                 <span className="text-slate-100 font-medium">{token.meaning}</span>
                                 <button
@@ -684,9 +731,9 @@ id: item.id,
                                   }}
                                   className="ml-1 bg-slate-700 hover:bg-amber-500 text-white rounded-full w-5 h-5 flex items-center justify-center transition-colors shadow-sm"
                                   title="단어장에 추가"
-                                  >
-                                    +
-                                  </button>
+                                >
+                                  +
+                                </button>
                               </div>
                               <div className="w-2 h-2 bg-slate-900 rotate-45 -mt-1 border-r border-b border-slate-700"></div>
                             </div>
@@ -713,35 +760,33 @@ id: item.id,
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-slate-700">발음 분석 결과</span>
                       {pronunciationScore !== null && (
-                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full shadow-sm ${
-                          pronunciationScore >= 80 
+                        <span className={`text-xs font-bold px-2.5 py-1 rounded-full shadow-sm ${pronunciationScore >= 80
                             ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
                             : pronunciationScore >= 50
-                            ? "bg-amber-100 text-amber-700 border border-amber-300"
-                            : "bg-rose-100 text-rose-700 border border-rose-300"
-                        }`}>
+                              ? "bg-amber-100 text-amber-700 border border-amber-300"
+                              : "bg-rose-100 text-rose-700 border border-rose-300"
+                          }`}>
                           정확도 {pronunciationScore}%
                         </span>
                       )}
                     </div>
-                    
+
                     {pronunciationDetails && (
                       <div className="flex flex-wrap gap-1.5 p-3 bg-white rounded-lg border border-slate-100 shadow-sm">
                         {pronunciationDetails.map((item, idx) => (
-                          <span 
-                            key={idx} 
-                            className={`text-sm md:text-base font-semibold px-1 rounded transition-colors ${
-                              item.isMatched 
-                                ? "text-emerald-600 bg-emerald-50" 
+                          <span
+                            key={idx}
+                            className={`text-sm md:text-base font-semibold px-1 rounded transition-colors ${item.isMatched
+                                ? "text-emerald-600 bg-emerald-50"
                                 : "text-rose-500 bg-rose-50 underline decoration-rose-300 decoration-2 underline-offset-2"
-                            }`}
+                              }`}
                           >
                             {item.word}
                           </span>
                         ))}
                       </div>
                     )}
-                    
+
                     <div className="mt-2 text-xs text-slate-500 flex items-start gap-1.5 bg-white p-2 rounded border border-slate-100">
                       <span className="font-semibold text-slate-600 shrink-0">내 음성:</span>
                       <p className="italic">"{spokenText}"</p>
@@ -759,14 +804,13 @@ id: item.id,
 
           <div className="pt-3 border-t border-slate-100 flex items-center justify-between mt-4">
             <div className="flex items-center gap-2.5">
-              <button 
+              <button
                 onClick={handleToggleRecord}
                 disabled={!result}
-                className={`w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed active:scale-95 ${
-                  isRecording 
-                    ? "bg-rose-500 text-white animate-pulse shadow-md ring-4 ring-rose-100" 
+                className={`w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed active:scale-95 ${isRecording
+                    ? "bg-rose-500 text-white animate-pulse shadow-md ring-4 ring-rose-100"
                     : "bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-700"
-                }`}
+                  }`}
               >
                 {isRecording ? <Square className="w-4 h-4 fill-white" /> : <Mic className="w-4 h-4" />}
               </button>
@@ -781,10 +825,10 @@ id: item.id,
             </div>
 
             {spokenText && (
-              <button 
-                onClick={() => { 
-                  setSpokenText(""); 
-                  setPronunciationScore(null); 
+              <button
+                onClick={() => {
+                  setSpokenText("");
+                  setPronunciationScore(null);
                   setPronunciationDetails(null);
                 }}
                 className="text-slate-400 hover:text-slate-600 p-1.5 cursor-pointer"
@@ -802,7 +846,7 @@ id: item.id,
       {showLimitModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 relative animate-in fade-in zoom-in-95 duration-150">
-            <button 
+            <button
               onClick={() => setShowLimitModal(false)}
               className="absolute top-4 right-4 text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
             >
@@ -831,7 +875,7 @@ id: item.id,
       {showHistory && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] flex flex-col shadow-2xl border border-slate-100 relative animate-in fade-in zoom-in-95 duration-150">
-            
+
             <div className="flex items-center justify-between p-5 border-b border-slate-100">
               <div className="flex items-center gap-4">
                 <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -840,15 +884,14 @@ id: item.id,
                 </h3>
                 <button
                   onClick={() => setIsHistoryBlindMode(!isHistoryBlindMode)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${
-                    isHistoryBlindMode ? "bg-violet-100 text-violet-700" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                  }`}
+                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${isHistoryBlindMode ? "bg-violet-100 text-violet-700" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                    }`}
                 >
                   {isHistoryBlindMode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                   블라인드 {isHistoryBlindMode ? "ON" : "OFF"}
                 </button>
               </div>
-              <button 
+              <button
                 onClick={() => setShowHistory(false)}
                 className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer"
               >
@@ -863,56 +906,91 @@ id: item.id,
                 </div>
               ) : (
                 <div className="space-y-4">
-                  {history.map((item) => (
-                    <div key={item.id} className={`p-4 rounded-xl border shadow-sm flex flex-col gap-2 relative group transition-all duration-300 ${
-                      item.isMemorized ? "bg-slate-100 border-slate-200 opacity-60 grayscale-[50%]" : "bg-white border-slate-200"
-                    }`}>
-                      <div className="flex justify-between items-start mb-1">
-                        <span className="text-[10px] font-medium text-slate-400">{item.date}</span>
-                        {/* 암기 완료 토글 버튼 */}
-                        <button 
-                          onClick={() => toggleHistoryMemorized(item.id, item.isMemorized || false)}
-                          className={`p-1.5 rounded-md transition-colors cursor-pointer ${
-                            item.isMemorized ? "text-emerald-500 bg-emerald-50 opacity-100" : "text-slate-300 hover:text-emerald-500 hover:bg-slate-100 md:opacity-0 group-hover:opacity-100"
-                          }`}
-                          title="암기 완료"
-                        >
-                          <Check className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                      
-                      <div className="flex items-start gap-1.5 -mt-3">
-                        <span className="shrink-0 bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded text-[10px] font-bold mt-0.5">Q</span>
-                        <p className="text-xs text-slate-600 font-medium leading-relaxed">{item.originalText}</p>
-                      </div>
+                  {history.map((item) => {
+                    // 👇 1. 스마트 판별 로직 추가
+                    // 알파벳만 남겨서 대소문자/특수기호 무시하고 두 문장이 같은지 비교
+                    const cleanOriginal = item.originalText.toLowerCase().replace(/[^a-z]/g, '');
+                    const cleanCorrected = item.correctedText.toLowerCase().replace(/[^a-z]/g, '');
 
-                      <div className="flex items-start gap-1.5 mt-0.5">
-                        <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold mt-0.5 transition-colors ${
-                          isHistoryBlindMode ? "bg-slate-200 text-slate-400" : "bg-violet-100 text-violet-600"
-                        }`}>A</span>
-                        <p className={`text-sm font-bold transition-all duration-300 flex-1 ${
-                          isHistoryBlindMode ? "text-transparent bg-slate-200 rounded blur-[5px] select-none cursor-help hover:text-slate-800 hover:bg-transparent hover:blur-none" : "text-slate-800"
+                    // 영어를 입력했는데 완벽해서 교정할 게 없는 경우 (Q와 A가 사실상 같음)
+                    const isPerfectEnglish = cleanOriginal === cleanCorrected && cleanOriginal.length > 0;
+
+                    // 애초에 한글 문장을 입력해서 번역기로 쓴 경우 (Q가 한글임)
+                    const isKoreanInput = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(item.originalText);
+
+                    return (
+                      <div key={item.id} className={`p-4 rounded-xl border shadow-sm flex flex-col gap-2 relative group transition-all duration-300 ${item.isMemorized ? "bg-slate-100 border-slate-200 opacity-60 grayscale-[50%]" : "bg-white border-slate-200"
                         }`}>
-                          {item.correctedText}
-                        </p>
-                        {/* 미니 TTS 버튼 */}
-                        <button 
-                          onClick={(e) => playText(item.correctedText, e)}
-                          className="shrink-0 p-1.5 text-violet-400 hover:text-violet-600 hover:bg-violet-50 rounded-md transition-colors cursor-pointer"
-                          title="발음 듣기"
-                        >
-                          <Volume2 className="w-4 h-4" />
-                        </button>
-                      </div>
-
-                      {!isHistoryBlindMode && (
-                        <div className="mt-1.5 text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 leading-relaxed animate-in fade-in duration-300">
-                          <span className="font-semibold text-slate-700 block mb-1">💡 뉘앙스 노트</span>
-                          {item.nuance}
+                        {/* --- 상단 날짜 및 암기완료 버튼 (기존과 동일) --- */}
+                        <div className="flex justify-between items-start mb-1">
+                          <span className="text-[10px] font-medium text-slate-400">{item.date}</span>
+                          <button
+                            onClick={() => toggleHistoryMemorized(item.id, item.isMemorized || false)}
+                            className={`p-1.5 rounded-md transition-colors cursor-pointer ${item.isMemorized ? "text-emerald-500 bg-emerald-50 opacity-100" : "text-slate-300 hover:text-emerald-500 hover:bg-slate-100 md:opacity-0 group-hover:opacity-100"
+                              }`}
+                            title="암기 완료"
+                          >
+                            <Check className="w-3.5 h-3.5" />
+                          </button>
                         </div>
-                      )}
-                    </div>
-                  ))}
+
+                        {/* --- Q 영역 (기존과 동일) --- */}
+                        <div className="flex items-start gap-1.5 -mt-3">
+                          <span className="shrink-0 bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded text-[10px] font-bold mt-0.5">Q</span>
+                          <p className="text-xs text-slate-600 font-medium leading-relaxed">{item.originalText}</p>
+                        </div>
+
+                        {/* 👇 2. A 영역 (스마트 렌더링 적용) */}
+                        <div className="flex items-start gap-1.5 mt-0.5">
+                          <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold mt-0.5 transition-colors ${isHistoryBlindMode ? "bg-slate-200 text-slate-400" : "bg-violet-100 text-violet-600"
+                            }`}>A</span>
+
+                          <div className="flex-1 flex flex-col">
+                            {isPerfectEnglish ? (
+                              /* 🟢 케이스 1: 완벽한 영어 -> 중복 영어를 숨기고 '한글 해석'만 렌더링 */
+                              <p className={`text-sm font-bold transition-all duration-300 ${isHistoryBlindMode ? "text-transparent bg-slate-200 rounded blur-[5px] select-none cursor-help hover:text-slate-800 hover:bg-transparent hover:blur-none" : "text-slate-800"
+                                }`}>
+                                {item.koreanTranslation || item.correctedText}
+                              </p>
+                            ) : (
+                              /* 🟢 케이스 2: 교정되었거나 한글을 번역한 경우 -> '교정된 영어' 렌더링 */
+                              <>
+                                <p className={`text-sm font-bold transition-all duration-300 ${isHistoryBlindMode ? "text-transparent bg-slate-200 rounded blur-[5px] select-none cursor-help hover:text-slate-800 hover:bg-transparent hover:blur-none" : "text-slate-800"
+                                  }`}>
+                                  {item.correctedText}
+                                </p>
+
+                                {/* 한글 뜻은 '한글 입력'이 아닐 때만 아래에 추가로 표시 (중복 방지) */}
+                                {!isKoreanInput && item.koreanTranslation && (
+                                  <p className={`text-[11px] mt-0.5 font-medium transition-all duration-300 ${isHistoryBlindMode ? "text-transparent bg-slate-200 rounded blur-[4px] select-none cursor-help hover:text-slate-600 hover:bg-transparent hover:blur-none" : "text-violet-600/80"
+                                    }`}>
+                                    {item.koreanTranslation}
+                                  </p>
+                                )}
+                              </>
+                            )}
+                          </div>
+
+                          {/* 미니 TTS 버튼 (화면엔 한글이 떠도, 읽어주는 건 정답 영어를 읽어줍니다!) */}
+                          <button
+                            onClick={(e) => playText(item.correctedText, e)}
+                            className="shrink-0 p-1.5 text-violet-400 hover:text-violet-600 hover:bg-violet-50 rounded-md transition-colors cursor-pointer"
+                            title="발음 듣기"
+                          >
+                            <Volume2 className="w-4 h-4" />
+                          </button>
+                        </div>
+
+                        {/* --- 뉘앙스 노트 영역 (기존과 동일) --- */}
+                        {!isHistoryBlindMode && (
+                          <div className="mt-1.5 text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 leading-relaxed animate-in fade-in duration-300">
+                            <span className="font-semibold text-slate-700 block mb-1">💡 뉘앙스 노트</span>
+                            {item.nuance}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -932,16 +1010,14 @@ id: item.id,
       )}
 
       {/* 단어장 사이드바 */}
-      <div 
-        className={`fixed inset-0 bg-slate-900/20 backdrop-blur-[2px] z-40 transition-opacity duration-300 ${
-          showVocab ? "opacity-100 visible" : "opacity-0 invisible"
-        }`}
+      <div
+        className={`fixed inset-0 bg-slate-900/20 backdrop-blur-[2px] z-40 transition-opacity duration-300 ${showVocab ? "opacity-100 visible" : "opacity-0 invisible"
+          }`}
         onClick={() => setShowVocab(false)}
       />
 
-      <div className={`fixed top-0 right-0 h-full w-full md:w-96 bg-slate-50 shadow-2xl z-50 flex flex-col transform transition-transform duration-300 ease-in-out ${
-        showVocab ? "translate-x-0" : "translate-x-full"
-      }`}>
+      <div className={`fixed top-0 right-0 h-full w-full md:w-96 bg-slate-50 shadow-2xl z-50 flex flex-col transform transition-transform duration-300 ease-in-out ${showVocab ? "translate-x-0" : "translate-x-full"
+        }`}>
         <div className="flex items-center justify-between p-5 bg-white border-b border-slate-200">
           <div className="flex items-center gap-4">
             <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -950,15 +1026,14 @@ id: item.id,
             </h3>
             <button
               onClick={() => setIsVocabBlindMode(!isVocabBlindMode)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${
-                isVocabBlindMode ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-              }`}
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${isVocabBlindMode ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                }`}
             >
               {isVocabBlindMode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               블라인드 {isVocabBlindMode ? "ON" : "OFF"}
             </button>
           </div>
-          <button 
+          <button
             onClick={() => setShowVocab(false)}
             className="text-slate-400 hover:text-slate-600 p-1 cursor-pointer bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors"
           >
@@ -978,21 +1053,19 @@ id: item.id,
           ) : (
             <div className="space-y-3">
               {vocab.map((item) => (
-                <div key={item.id} className={`p-4 rounded-xl border shadow-sm flex flex-col gap-2 relative group transition-all duration-300 ${
-                  item.isMemorized ? "bg-slate-100 border-slate-200 opacity-60 grayscale-[50%]" : "bg-white border-slate-200"
-                }`}>
+                <div key={item.id} className={`p-4 rounded-xl border shadow-sm flex flex-col gap-2 relative group transition-all duration-300 ${item.isMemorized ? "bg-slate-100 border-slate-200 opacity-60 grayscale-[50%]" : "bg-white border-slate-200"
+                  }`}>
                   {/* 우측 상단 버튼 그룹 (암기 완료 & 삭제) */}
                   <div className="absolute top-3 right-3 flex items-center gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button 
+                    <button
                       onClick={() => toggleVocabMemorized(item.id, item.isMemorized || false)}
-                      className={`p-1 rounded-md transition-colors cursor-pointer ${
-                        item.isMemorized ? "text-emerald-500 bg-emerald-50 opacity-100" : "text-slate-300 hover:text-emerald-500 hover:bg-slate-100"
-                      }`}
+                      className={`p-1 rounded-md transition-colors cursor-pointer ${item.isMemorized ? "text-emerald-500 bg-emerald-50 opacity-100" : "text-slate-300 hover:text-emerald-500 hover:bg-slate-100"
+                        }`}
                       title="암기 완료"
                     >
                       <Check className="w-4 h-4" />
                     </button>
-                    <button 
+                    <button
                       onClick={() => removeVocab(item.id)}
                       className="text-rose-400 hover:text-rose-600 hover:bg-rose-50 p-1 rounded-md transition-colors cursor-pointer"
                       title="삭제"
@@ -1002,9 +1075,9 @@ id: item.id,
                   </div>
 
                   <div className="flex justify-between items-start mb-1">
-                    <span className="text-[10px] font-medium text-slate-400">{item.date} 추가됨</span>
+                    <span className="text-[10px] font-medium text-slate-400">{item.date}</span>
                   </div>
-                  
+
                   {/* Q: 영단어 */}
                   <div className="flex items-center gap-1.5 -mt-2">
                     <span className="shrink-0 bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded text-[10px] font-bold">Q</span>
@@ -1012,7 +1085,7 @@ id: item.id,
                       {item.word}
                     </h4>
                     {/* 미니 TTS 버튼 */}
-                    <button 
+                    <button
                       onClick={(e) => playText(item.word, e)}
                       className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-md transition-colors cursor-pointer ml-1"
                       title="발음 듣기"
@@ -1023,15 +1096,13 @@ id: item.id,
 
                   {/* A: 뜻과 품사 */}
                   <div className="flex items-center gap-2 mt-1">
-                    <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${
-                      isVocabBlindMode ? "bg-slate-200 text-slate-400" : "bg-emerald-100 text-emerald-600"
-                    }`}>A</span>
-                    
-                    <div className={`flex items-center gap-2 transition-all duration-300 w-fit bg-slate-50 p-2 rounded-lg border border-slate-100 ${
-                      isVocabBlindMode 
-                        ? "opacity-30 blur-[4px] select-none cursor-help hover:opacity-100 hover:blur-none" 
+                    <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${isVocabBlindMode ? "bg-slate-200 text-slate-400" : "bg-emerald-100 text-emerald-600"
+                      }`}>A</span>
+
+                    <div className={`flex items-center gap-2 transition-all duration-300 w-fit bg-slate-50 p-2 rounded-lg border border-slate-100 ${isVocabBlindMode
+                        ? "opacity-30 blur-[4px] select-none cursor-help hover:opacity-100 hover:blur-none"
                         : ""
-                    }`}>
+                      }`}>
                       <span className="bg-violet-100 text-violet-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
                         {item.pos}
                       </span>
