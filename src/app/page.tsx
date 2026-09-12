@@ -21,6 +21,7 @@ import {
 
 import { supabase } from "@/lib/supabase";
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 
 interface HistoryItem {
   id: string;
@@ -546,33 +547,30 @@ export default function Home() {
             )}
           </button>
           <span className={`text-xs font-semibold px-2.5 py-1 md:px-3 md:py-1.5 rounded-full border transition-colors ${remainingCount > 0
-              ? "bg-violet-100 text-violet-700 border-violet-200"
-              : "bg-rose-100 text-rose-700 border-rose-200 animate-pulse"
+            ? "bg-violet-100 text-violet-700 border-violet-200"
+            : "bg-rose-100 text-rose-700 border-rose-200 animate-pulse"
             }`}>
             오늘 무료 {remainingCount}/{MAX_FREE_COUNT}
           </span>
           <div className="h-4 w-px bg-slate-200 mx-1 hidden md:block"></div> {/* 구분선 */}
 
           {user ? (
-            <div className="flex items-center gap-2 bg-white p-1 pr-3 rounded-full border border-slate-200 shadow-sm shrink-0">
+            <Link href="/mypage" className="flex items-center gap-2 bg-white p-1 pr-3 rounded-full border border-slate-200 hover:border-violet-300 hover:ring-2 hover:ring-violet-100 transition-all shadow-sm shrink-0 cursor-pointer group">
               <img
-                src={user.user_metadata.avatar_url}
+                src={user.user_metadata.custom_avatar || user.user_metadata.avatar_url}
                 alt="프로필"
                 className="w-7 h-7 md:w-8 md:h-8 rounded-full border border-slate-100"
                 referrerPolicy="no-referrer"
               />
-              <div className="flex flex-col hidden sm:flex">
-                <span className="text-[10px] md:text-xs font-bold text-slate-700 leading-none mb-0.5 max-w-[80px] truncate">
-                  {user.user_metadata.full_name}
+              <div className="flex flex-col hidden sm:flex text-left">
+                <span className="text-[10px] md:text-xs font-bold text-slate-700 leading-none mb-0.5 max-w-[80px] truncate group-hover:text-violet-700 transition-colors">
+                  {user.user_metadata.display_name || user.user_metadata.full_name}
                 </span>
-                <button
-                  onClick={handleLogout}
-                  className="text-[9px] md:text-[10px] text-slate-400 hover:text-rose-500 text-left leading-none transition-colors cursor-pointer"
-                >
-                  로그아웃
-                </button>
+                <span className="text-[9px] md:text-[10px] text-slate-400 font-medium leading-none">
+                  마이페이지
+                </span>
               </div>
-            </div>
+            </Link>
           ) : (
             <button
               onClick={() => window.location.href = '/login'}
@@ -603,8 +601,8 @@ export default function Home() {
             {/* 👇 4. 텍스트 입력창 높이 및 패딩 확장 (md:h-80, md:p-5) */}
             <textarea
               className={`w-full h-48 md:h-80 p-3.5 md:p-5 rounded-xl border focus:outline-hidden focus:ring-2 resize-none text-slate-800 text-sm leading-relaxed placeholder:text-slate-400 bg-slate-50/50 transition-all ${inputText.length > MAX_CHAR_LIMIT
-                  ? "border-rose-300 focus:ring-rose-200"
-                  : "border-slate-200 focus:ring-amber-300 focus:border-transparent"
+                ? "border-rose-300 focus:ring-rose-200"
+                : "border-slate-200 focus:ring-amber-300 focus:border-transparent"
                 }`}
               placeholder="영어로 표현하고 싶은 문장이나 교정받고 싶은 영어를 입력하세요..."
               value={inputText}
@@ -681,8 +679,8 @@ export default function Home() {
                       onClick={handlePlayTTS}
                       disabled={isPlayingAudio}
                       className={`flex items-center gap-1 text-xs font-semibold px-2.5 py-1.5 rounded-md transition-all active:scale-95 whitespace-nowrap ${isPlayingAudio
-                          ? "bg-amber-100 text-amber-800 border border-amber-300 animate-pulse"
-                          : "bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200"
+                        ? "bg-amber-100 text-amber-800 border border-amber-300 animate-pulse"
+                        : "bg-violet-50 hover:bg-violet-100 text-violet-700 border border-violet-200"
                         }`}
                     >
                       <Volume2 className="w-3.5 h-3.5" />
@@ -712,8 +710,8 @@ export default function Home() {
                             onClick={(e) => { e.stopPropagation(); handleTokenClick(idx); }}
                           >
                             <span className={`cursor-pointer px-2 py-1 rounded-lg border text-sm font-semibold transition-all shadow-2xs block ${activeTokenIdx === idx
-                                ? "bg-violet-600 text-white border-violet-600"
-                                : "bg-white group-hover:bg-violet-600 group-hover:text-white text-slate-800 border-slate-200"
+                              ? "bg-violet-600 text-white border-violet-600"
+                              : "bg-white group-hover:bg-violet-600 group-hover:text-white text-slate-800 border-slate-200"
                               }`}>
                               {token.word}
                             </span>
@@ -761,10 +759,10 @@ export default function Home() {
                       <span className="text-xs font-bold text-slate-700">발음 분석 결과</span>
                       {pronunciationScore !== null && (
                         <span className={`text-xs font-bold px-2.5 py-1 rounded-full shadow-sm ${pronunciationScore >= 80
-                            ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
-                            : pronunciationScore >= 50
-                              ? "bg-amber-100 text-amber-700 border border-amber-300"
-                              : "bg-rose-100 text-rose-700 border border-rose-300"
+                          ? "bg-emerald-100 text-emerald-700 border border-emerald-300"
+                          : pronunciationScore >= 50
+                            ? "bg-amber-100 text-amber-700 border border-amber-300"
+                            : "bg-rose-100 text-rose-700 border border-rose-300"
                           }`}>
                           정확도 {pronunciationScore}%
                         </span>
@@ -777,8 +775,8 @@ export default function Home() {
                           <span
                             key={idx}
                             className={`text-sm md:text-base font-semibold px-1 rounded transition-colors ${item.isMatched
-                                ? "text-emerald-600 bg-emerald-50"
-                                : "text-rose-500 bg-rose-50 underline decoration-rose-300 decoration-2 underline-offset-2"
+                              ? "text-emerald-600 bg-emerald-50"
+                              : "text-rose-500 bg-rose-50 underline decoration-rose-300 decoration-2 underline-offset-2"
                               }`}
                           >
                             {item.word}
@@ -808,8 +806,8 @@ export default function Home() {
                 onClick={handleToggleRecord}
                 disabled={!result}
                 className={`w-10 h-10 rounded-full flex items-center justify-center transition-all cursor-pointer disabled:cursor-not-allowed active:scale-95 ${isRecording
-                    ? "bg-rose-500 text-white animate-pulse shadow-md ring-4 ring-rose-100"
-                    : "bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-700"
+                  ? "bg-rose-500 text-white animate-pulse shadow-md ring-4 ring-rose-100"
+                  : "bg-slate-100 hover:bg-slate-200 disabled:opacity-40 text-slate-700"
                   }`}
               >
                 {isRecording ? <Square className="w-4 h-4 fill-white" /> : <Mic className="w-4 h-4" />}
@@ -1100,8 +1098,8 @@ export default function Home() {
                       }`}>A</span>
 
                     <div className={`flex items-center gap-2 transition-all duration-300 w-fit bg-slate-50 p-2 rounded-lg border border-slate-100 ${isVocabBlindMode
-                        ? "opacity-30 blur-[4px] select-none cursor-help hover:opacity-100 hover:blur-none"
-                        : ""
+                      ? "opacity-30 blur-[4px] select-none cursor-help hover:opacity-100 hover:blur-none"
+                      : ""
                       }`}>
                       <span className="bg-violet-100 text-violet-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
                         {item.pos}

@@ -1,52 +1,80 @@
-"use client"; // 버튼 클릭 등 상호작용을 위해 클라이언트 컴포넌트로 선언
+"use client";
 
-import React from 'react';
-import { Mail, Lock } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
-
-// Supabase 클라이언트 초기화 (어제 세팅한 환경 변수 사용)
-const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL as string;
-const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY as string;
-const supabase = createClient(supabaseUrl, supabaseKey);
+import React, { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { supabase } from '@/lib/supabase';
+import { Mail, Lock, Loader2 } from 'lucide-react';
+import Link from 'next/link';
 
 export default function LoginPage() {
-  
-  // 🚀 구글 로그인 실행 함수
-  const handleGoogleLogin = async () => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        // 로그인 성공 후 돌아올 원래 주소 (현재 주소의 기본 도메인, 예: localhost:3000)
-        redirectTo: `${window.location.origin}`, 
-      },
-    });
+  const router = useRouter();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-    if (error) {
-      console.error('구글 로그인 에러:', error.message);
-      alert('로그인 중 오류가 발생했습니다.');
+  // 구글 로그인 (선택 사항 - 기존에 구현해두셨다면 유지)
+  const handleGoogleLogin = async () => {
+    await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: { redirectTo: `${window.location.origin}/auth/callback` }
+    });
+  };
+
+  // 🚨 새롭게 추가된 이메일/비밀번호 로그인 로직
+  const handleEmailLogin = async (e: React.FormEvent) => {
+    e.preventDefault(); // 엔터 쳤을 때 새로고침 방지
+    
+    if (!email || !password) return alert("이메일과 비밀번호를 모두 입력해주세요.");
+    setIsLoading(true);
+
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        // 에러 종류에 따른 친절한 알림
+        if (error.message === "Invalid login credentials") {
+          alert("이메일 또는 비밀번호가 일치하지 않습니다.");
+        } else if (error.message === "Email not confirmed") {
+          alert("이메일 인증이 완료되지 않은 계정입니다.");
+        } else {
+          alert("로그인 중 오류가 발생했습니다.");
+        }
+        throw error;
+      }
+
+      // 로그인 성공! 홈으로 이동
+      router.push('/');
+      router.refresh(); // 헤더 등 상태 업데이트를 위해 새로고침
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-sm border border-slate-100 p-8">
+    <main className="min-h-screen bg-[#FAF9F6] flex flex-col items-center justify-center p-4">
+      <div className="w-full max-w-md bg-white p-8 rounded-3xl shadow-xl border border-slate-100 text-center">
         
-        <div className="text-center mb-8">
-          <h1 className="text-2xl font-bold text-slate-800">
+        {/* 타이틀 영역 */}
+        <div className="mb-8">
+          <h1 className="text-2xl font-bold mb-2">
             <span className="text-amber-500 mr-2">ㅈㅍ</span>
-            집필중 (Zipil)
+            <span className="text-slate-900">집필중 (Zipil)</span>
           </h1>
-          <p className="text-slate-500 mt-2 text-sm">
-            AI 영작 & 인터랙티브 발음 교정 워크스페이스
-          </p>
+          <p className="text-sm text-slate-500">AI 영작 & 인터랙티브 발음 교정 워크스페이스</p>
         </div>
 
-        {/* 👇 여기에 onClick 이벤트를 달아주었습니다! */}
+        {/* 구글 로그인 버튼 */}
         <button 
           onClick={handleGoogleLogin}
-          className="w-full flex items-center justify-center gap-3 bg-white border border-slate-200 rounded-xl p-3 text-slate-700 font-medium hover:bg-slate-50 transition-colors mb-6 shadow-sm"
+          type="button"
+          className="w-full py-3.5 bg-white border border-slate-200 text-slate-700 rounded-xl font-bold hover:bg-slate-50 transition-colors flex items-center justify-center gap-2 shadow-sm mb-6"
         >
-          <svg viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
             <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
             <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
@@ -55,41 +83,55 @@ export default function LoginPage() {
           Google로 시작하기
         </button>
 
-        <div className="relative flex items-center justify-center mb-6">
-          <div className="border-t border-slate-200 w-full"></div>
-          <span className="bg-white px-3 text-sm text-slate-400 absolute">또는 이메일로 계속하기</span>
+        <div className="flex items-center gap-3 mb-6">
+          <div className="h-px bg-slate-100 flex-1"></div>
+          <span className="text-xs text-slate-400 font-medium">또는 이메일로 계속하기</span>
+          <div className="h-px bg-slate-100 flex-1"></div>
         </div>
 
-        <div className="space-y-4">
+        {/* 🚨 이메일 로그인 폼 (form 태그로 감싸서 엔터키 로그인 지원) */}
+        <form onSubmit={handleEmailLogin} className="space-y-4 mb-8">
           <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
             <input 
               type="email" 
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
               placeholder="이메일 주소" 
-              className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+              className="w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 text-sm font-medium" 
             />
           </div>
           <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+            <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
             <input 
               type="password" 
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
               placeholder="비밀번호" 
-              className="w-full pl-10 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white transition-all"
+              className="w-full pl-11 pr-4 py-3.5 bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 text-sm font-medium" 
             />
           </div>
-
-          <button className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl p-3 transition-colors shadow-sm">
-            로그인
+          <button 
+            type="submit"
+            disabled={isLoading || !email || !password}
+            className="w-full py-4 bg-violet-600 text-white rounded-xl font-bold hover:bg-violet-700 transition-colors shadow-md flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "로그인"}
           </button>
-        </div>
+        </form>
 
-        <div className="mt-6 text-center text-sm text-slate-500">
-          아직 계정이 없으신가요?{' '}
-          <button className="text-indigo-600 font-semibold hover:underline">
+        {/* 하단 회원가입 이동 링크 */}
+        <div className="pt-6 border-t border-slate-100 space-y-4">
+          <p className="text-sm text-slate-500">아직 계정이 없으신가요?</p>
+          <Link 
+            href="/signup" 
+            className="flex items-center justify-center w-full py-3.5 bg-slate-50 text-slate-700 rounded-xl font-bold hover:bg-slate-100 border border-slate-200 transition-colors"
+          >
             이메일로 회원가입
-          </button>
+          </Link>
         </div>
+        
       </div>
-    </div>
+    </main>
   );
 }

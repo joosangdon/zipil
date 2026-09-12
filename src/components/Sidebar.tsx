@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Home, Gamepad2, BarChart2, ChevronLeft } from 'lucide-react';
+import { Home, Gamepad2, BarChart2, ChevronLeft, User } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation'; // 현재 주소를 알아내는 훅
 
@@ -14,7 +14,7 @@ export default function Sidebar() {
     setIsSidebarCollapsed(true);
   }, [pathname]);
 
-  if (pathname === '/login') return null; 
+  if (pathname === '/login' || pathname === '/signup') return null;
 
   return (
     <aside 
@@ -75,6 +75,18 @@ export default function Sidebar() {
         >
           <BarChart2 className="w-5 h-5 shrink-0" />
           {!isSidebarCollapsed && <span className="text-sm whitespace-nowrap">학습 통계</span>}
+        </Link>
+        {/* 마이페이지 */}
+        
+        <Link 
+          href="/mypage" className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
+            pathname === '/mypage' 
+              ? "bg-slate-800/80 text-amber-400 font-semibold" 
+              : "hover:bg-slate-800/50 hover:text-white text-slate-400 font-medium"
+          } ${isSidebarCollapsed ? "justify-center" : ""}`}
+        >
+          <User className="w-5 h-5 shrink-0" />
+          {!isSidebarCollapsed && <span className="text-sm whitespace-nowrap">마이페이지</span>}
         </Link>
       </nav>
     </aside>

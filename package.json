@@ -16,6 +16,7 @@
     "openai": "^7.7.0",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "react-easy-crop": "^6.2.3",
     "tailwind-merge": "^3.6.0"
   },
   "devDependencies": {
