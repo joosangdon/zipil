@@ -3,6 +3,9 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import Sidebar from "@/components/Sidebar"; // 👇 방금 만든 사이드바 불러오기
 
+// 1. react-hot-toast에서 Toaster 불러오기
+import { Toaster } from 'react-hot-toast';
+
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
@@ -30,6 +33,27 @@ export default function RootLayout({
           </div>
           
         </div>
+
+        {/* 👇 2. 최상위 레이아웃에 Toaster 추가 (모든 페이지에서 알림이 뜨게 함) */}
+        <Toaster 
+          position="top-center" // 알림이 뜰 위치 (우상단을 원하시면 'top-right'로 변경)
+          toastOptions={{
+            duration: 2500, // 2.5초 뒤에 스르륵 사라짐
+            style: {
+              background: '#334155', // 세련된 짙은 남색 배경
+              color: '#fff', // 흰색 글씨
+              fontSize: '14px',
+              fontWeight: '500',
+              borderRadius: '12px', // 둥근 모서리
+            },
+            success: {
+              iconTheme: {
+                primary: '#10b981', // 성공 아이콘 색상 (에메랄드)
+                secondary: '#fff',
+              },
+            },
+          }}
+        />
       </body>
     </html>
   );

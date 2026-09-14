@@ -16,12 +16,14 @@ import {
   X,
   Eye,
   EyeOff,
-  Check // 👇 암기 완료 체크 아이콘 추가
+  Check, 
+  Crown
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase";
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
 
 interface HistoryItem {
   id: string;
@@ -91,14 +93,88 @@ export default function Home() {
 
   const [user, setUser] = useState<any>(null);
 
+  const [timeUntilMidnight, setTimeUntilMidnight] = useState("");
+
+  // 👇 2. PRO 모달 상태 추가
+  const [showProModal, setShowProModal] = useState(false);
+
+  // 👇 1. 단어장 다중 선택/삭제용 상태 추가
+  const [isVocabEditMode, setIsVocabEditMode] = useState(false); // 편집 모드 켜짐/꺼짐
+  const [selectedVocabIds, setSelectedVocabIds] = useState<string[]>([]); // 선택된 단어들의 ID 배열
+
+  // 👇 2. 단어 다중 선택 토글 함수
+  const toggleVocabSelection = (id: string) => {
+    setSelectedVocabIds(prev => 
+      prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]
+    );
+  };
+
+  // 👇 3. 전체 선택 / 해제 함수
+  const handleSelectAllVocab = () => {
+    if (selectedVocabIds.length === vocab.length) {
+      setSelectedVocabIds([]); // 이미 다 선택되어 있으면 전부 해제
+    } else {
+      setSelectedVocabIds(vocab.map(v => v.id)); // 아니면 전체 선택
+    }
+  };
+
+  // 👇 1. 커스텀 삭제 모달창 띄우기 상태 추가
+  const [showVocabDeleteModal, setShowVocabDeleteModal] = useState(false);
+
+  // 👇 2. 하단 '삭제' 버튼을 눌렀을 때 (기존 코드 덮어쓰기)
+  const handleDeleteSelectedVocab = () => {
+    if (selectedVocabIds.length === 0) return;
+    // 브라우저 기본 confirm 대신, 우리가 만든 예쁜 모달을 켭니다.
+    setShowVocabDeleteModal(true); 
+  };
+
+  // 👇 3. 모달창 안에서 '확인(삭제)'을 눌렀을 때 진짜 DB에서 지우는 함수 (새로 추가)
+  const executeDeleteVocab = async () => {
+    try {
+      const { error } = await supabase.from("vocab").delete().in("id", selectedVocabIds);
+      if (error) throw error;
+
+      setVocab(vocab.filter(item => !selectedVocabIds.includes(item.id)));
+      setSelectedVocabIds([]); 
+      setIsVocabEditMode(false); 
+      setShowVocabDeleteModal(false); // 삭제 완료 후 모달 닫기
+      toast.success("선택한 단어가 삭제되었습니다.");
+    } catch (err) {
+      console.error(err);
+      toast.error("단어 삭제 중 오류가 발생했습니다.");
+    }
+  };
+  
   useEffect(() => {
     // 1. 첫 렌더링 시 현재 로그인된 세션 확인
     const getUserSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
+      
       if (session) {
-        setUser(session.user);
+        // 👇 [검문소 2] 홈 화면 진입 시 탈퇴 여부 2차 확인 (구글 로그인 유저 타겟)
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_deleted')
+          .eq('id', session.user.id)
+          .single();
+
+        if (profile?.is_deleted) {
+          const isRecover = confirm("탈퇴 대기 중인 계정입니다.\n\n탈퇴를 취소하고 복구하시겠습니까?");
+          if (isRecover) {
+            // 복구 처리
+            await supabase.from('profiles').update({ is_deleted: false, deleted_at: null }).eq('id', session.user.id);
+            alert("계정이 성공적으로 복구되었습니다! 🎉");
+            setUser(session.user); // 복구 후에 화면 렌더링 허가
+          } else {
+            // 거절 시 튕겨내기
+            await supabase.auth.signOut();
+            router.push('/login');
+          }
+        } else {
+          // 탈퇴 안 한 정상 유저는 그대로 통과
+          setUser(session.user);
+        }
       } else {
-        // 👇 2. 세션(로그인 정보)이 없으면 로그인 페이지로 강제 이동
         router.push('/login');
       }
     };
@@ -106,9 +182,8 @@ export default function Home() {
 
     // 2. 로그인/로그아웃 상태 변화 실시간 감지
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
-      setUser(session?.user || null);
-      // 👇 3. 만약 도중에 로그아웃을 하거나 세션이 만료되면 튕겨내기
       if (event === 'SIGNED_OUT' || !session) {
+        setUser(null);
         router.push('/login');
       }
     });
@@ -116,8 +191,31 @@ export default function Home() {
     return () => {
       authListener.subscription.unsubscribe();
     };
-  }, [router]); // 👈 의존성 배열에 router 추가
+  }, [router]);
 
+  // 👇 기존 코드에서 freeCount를 remainingCount로 바꿔서 덮어쓰기!
+  useEffect(() => {
+    // 횟수가 남아있으면 타이머를 돌릴 필요 없음
+    if (remainingCount > 0) return; 
+
+    const calculateTimeLeft = () => {
+      const now = new Date();
+      const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      const diff = tomorrow.getTime() - now.getTime();
+
+      const h = String(Math.floor((diff / (1000 * 60 * 60)) % 24)).padStart(2, '0');
+      const m = String(Math.floor((diff / 1000 / 60) % 60)).padStart(2, '0');
+      const s = String(Math.floor((diff / 1000) % 60)).padStart(2, '0');
+
+      setTimeUntilMidnight(`${h}시간 ${m}분 ${s}초`);
+    };
+
+    calculateTimeLeft(); // 즉시 1번 실행
+    const timer = setInterval(calculateTimeLeft, 1000); // 1초마다 갱신
+
+    return () => clearInterval(timer);
+  }, [remainingCount]);
+  
   const handleLogout = async () => {
     await supabase.auth.signOut();
     window.location.href = '/login'; //
@@ -207,7 +305,7 @@ export default function Home() {
       localStorage.setItem("zipil_date", today);
     }
   }, []);
-
+  
   // 단어장 DB에서 가져오기
   const fetchVocab = async () => {
     const { data, error } = await supabase.from("vocab").select("*").order("created_at", { ascending: false });
@@ -455,7 +553,7 @@ export default function Home() {
   // 단어장에 새 단어 추가하기
   const addToVocab = async (word: string, meaning: string, pos: string) => {
     if (vocab.some(v => v.word.toLowerCase() === word.toLowerCase())) {
-      alert("이미 단어장에 저장된 단어입니다.");
+      toast.error("이미 단어장에 저장된 단어입니다."); // ✅ 이렇게 수정!
       return;
     }
 
@@ -492,11 +590,11 @@ export default function Home() {
           isMemorized: data[0].is_memorized
         };
         setVocab([newItem, ...vocab]);
-        alert(`'${word}' 단어가 저장되었습니다!`);
+        toast.success(`'${word}' 단어가 저장되었습니다!`);
       }
     } catch (err) {
       console.error("통신 에러:", err);
-      alert("서버와 통신하는 중 문제가 발생했습니다.");
+      toast.error("서버와 통신하는 중 문제가 발생했습니다.");
     }
   };
 
@@ -552,6 +650,13 @@ export default function Home() {
             }`}>
             오늘 무료 {remainingCount}/{MAX_FREE_COUNT}
           </span>
+          <button
+            onClick={() => setShowProModal(true)}
+            className="hidden md:flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-md hover:shadow-lg transition-all hover:scale-105"
+          >
+            <Crown className="w-3.5 h-3.5" />
+            PRO 업그레이드
+          </button>
           <div className="h-4 w-px bg-slate-200 mx-1 hidden md:block"></div> {/* 구분선 */}
 
           {user ? (
@@ -593,9 +698,25 @@ export default function Home() {
                 <PenTool className="w-4 h-4 text-amber-600" />
                 작성할 문장 (한글 또는 영문)
               </label>
-              <span className={`text-xs ${inputText.length > MAX_CHAR_LIMIT ? "text-rose-500 font-bold" : "text-slate-400"}`}>
-                {inputText.length}/{MAX_CHAR_LIMIT}자
-              </span>
+              
+              {/* 글자 수 및 전체 삭제 버튼 그룹 */}
+              <div className="flex items-center gap-3">
+                {/* 글자가 1자 이상일 때만 '전체 삭제' 버튼 표시 */}
+                {inputText.length > 0 && (
+                  <button
+                    onClick={() => setInputText("")}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
+                    title="입력 내용 전체 삭제"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                    지우기
+                  </button>
+                )}
+                
+                <span className={`text-xs ${inputText.length > MAX_CHAR_LIMIT ? "text-rose-500 font-bold" : "text-slate-400"}`}>
+                  {inputText.length}/{MAX_CHAR_LIMIT}자
+                </span>
+              </div>
             </div>
 
             {/* 👇 4. 텍스트 입력창 높이 및 패딩 확장 (md:h-80, md:p-5) */}
@@ -617,23 +738,39 @@ export default function Home() {
             )}
           </div>
 
-          <button
-            onClick={handleAnalyze}
-            disabled={loading || !inputText.trim() || inputText.length > MAX_CHAR_LIMIT}
-            className="w-full py-3.5 px-4 bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-colors shadow-xs cursor-pointer disabled:cursor-not-allowed mt-4 active:scale-[0.99]"
-          >
-            {loading ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin text-amber-300" />
-                AI 분석 및 교정 중...
-              </>
-            ) : (
-              <>
-                <Sparkles className="w-4 h-4 text-amber-300" />
-                AI 문장 교정 & 분석하기
-              </>
+          {/* 👇 이 부분 통째로 덮어쓰기 */}
+          <div className="flex flex-col gap-2 mt-4">
+            <button
+              onClick={handleAnalyze}
+              disabled={loading || !inputText.trim() || inputText.length > MAX_CHAR_LIMIT || remainingCount === 0}
+              className={`w-full py-3.5 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-colors shadow-xs active:scale-[0.99] ${
+                remainingCount === 0
+                  ? "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
+                  : "bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white cursor-pointer disabled:cursor-not-allowed"
+              }`}
+            >
+              {remainingCount === 0 ? (
+                `⏳ 자정 충전까지 ${timeUntilMidnight}`
+              ) : loading ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin text-amber-300" />
+                  AI 분석 및 교정 중...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="w-4 h-4 text-amber-300" />
+                  AI 문장 교정 & 분석하기
+                </>
+              )}
+            </button>
+
+            {/* 복습 전용 모드 안내 */}
+            {remainingCount === 0 && (
+              <p className="text-center text-xs text-slate-500 font-medium animate-pulse mt-1">
+                오늘 무료 분석을 모두 사용했습니다. 상단의 <span className="font-bold text-violet-600">내 학습 기록장</span>에서 복습해 보세요!
+              </p>
             )}
-          </button>
+          </div>
         </section>
 
         {/* 우측: 분석 및 발음 트레이닝 카드 */}
@@ -1022,6 +1159,21 @@ export default function Home() {
               <span className="text-lg">📚</span>
               내 단어장
             </h3>
+            {/* 👇 기존 블라인드 버튼 옆에 '편집' 버튼 추가! */}
+            {vocab.length > 0 && (
+              <button
+                onClick={() => {
+                  setIsVocabEditMode(!isVocabEditMode);
+                  setSelectedVocabIds([]); // 편집 모드 끄거나 켤 때 선택 초기화
+                }}
+                className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-colors ${
+                  isVocabEditMode ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                }`}
+              >
+                {isVocabEditMode ? '완료' : '편집'}
+              </button>
+            )}
+            {!isVocabEditMode && (
             <button
               onClick={() => setIsVocabBlindMode(!isVocabBlindMode)}
               className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${isVocabBlindMode ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
@@ -1030,6 +1182,7 @@ export default function Home() {
               {isVocabBlindMode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
               블라인드 {isVocabBlindMode ? "ON" : "OFF"}
             </button>
+            )}
           </div>
           <button
             onClick={() => setShowVocab(false)}
@@ -1039,7 +1192,8 @@ export default function Home() {
           </button>
         </div>
 
-        <div className="p-4 overflow-y-auto flex-1">
+        {/* 단어 리스트 영역 */}
+        <div className="p-4 overflow-y-auto flex-1 relative pb-20">
           {vocab.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-2">
               <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center text-2xl">
@@ -1051,62 +1205,81 @@ export default function Home() {
           ) : (
             <div className="space-y-3">
               {vocab.map((item) => (
-                <div key={item.id} className={`p-4 rounded-xl border shadow-sm flex flex-col gap-2 relative group transition-all duration-300 ${item.isMemorized ? "bg-slate-100 border-slate-200 opacity-60 grayscale-[50%]" : "bg-white border-slate-200"
-                  }`}>
-                  {/* 우측 상단 버튼 그룹 (암기 완료 & 삭제) */}
-                  <div className="absolute top-3 right-3 flex items-center gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button
-                      onClick={() => toggleVocabMemorized(item.id, item.isMemorized || false)}
-                      className={`p-1 rounded-md transition-colors cursor-pointer ${item.isMemorized ? "text-emerald-500 bg-emerald-50 opacity-100" : "text-slate-300 hover:text-emerald-500 hover:bg-slate-100"
-                        }`}
-                      title="암기 완료"
-                    >
-                      <Check className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => removeVocab(item.id)}
-                      className="text-rose-400 hover:text-rose-600 hover:bg-rose-50 p-1 rounded-md transition-colors cursor-pointer"
-                      title="삭제"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  <div className="flex justify-between items-start mb-1">
-                    <span className="text-[10px] font-medium text-slate-400">{item.date}</span>
-                  </div>
-
-                  {/* Q: 영단어 */}
-                  <div className="flex items-center gap-1.5 -mt-2">
-                    <span className="shrink-0 bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded text-[10px] font-bold">Q</span>
-                    <h4 className={`text-lg font-bold transition-all ${item.isMemorized ? "text-slate-500 line-through" : "text-slate-800"}`}>
-                      {item.word}
-                    </h4>
-                    {/* 미니 TTS 버튼 */}
-                    <button
-                      onClick={(e) => playText(item.word, e)}
-                      className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-md transition-colors cursor-pointer ml-1"
-                      title="발음 듣기"
-                    >
-                      <Volume2 className="w-4 h-4" />
-                    </button>
-                  </div>
-
-                  {/* A: 뜻과 품사 */}
-                  <div className="flex items-center gap-2 mt-1">
-                    <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${isVocabBlindMode ? "bg-slate-200 text-slate-400" : "bg-emerald-100 text-emerald-600"
-                      }`}>A</span>
-
-                    <div className={`flex items-center gap-2 transition-all duration-300 w-fit bg-slate-50 p-2 rounded-lg border border-slate-100 ${isVocabBlindMode
-                      ? "opacity-30 blur-[4px] select-none cursor-help hover:opacity-100 hover:blur-none"
-                      : ""
+                <div 
+                  key={item.id} 
+                  onClick={() => isVocabEditMode && toggleVocabSelection(item.id)}
+                  className={`p-4 rounded-xl border shadow-sm flex relative transition-all duration-300 ${
+                    item.isMemorized && !isVocabEditMode ? "bg-slate-100 border-slate-200 opacity-60 grayscale-[50%]" : "bg-white border-slate-200"
+                  } ${isVocabEditMode ? "cursor-pointer hover:border-violet-300" : ""}`}
+                >
+                  
+                  {/* 👇 편집 모드일 때 좌측에 보여줄 체크박스 */}
+                  {isVocabEditMode && (
+                    <div className="flex items-center justify-center mr-3">
+                      <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
+                        selectedVocabIds.includes(item.id) ? "bg-violet-600 border-violet-600" : "bg-white border-slate-300"
                       }`}>
-                      <span className="bg-violet-100 text-violet-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
-                        {item.pos}
-                      </span>
-                      <span className={`text-sm font-medium ${item.isMemorized ? "text-slate-400" : "text-slate-700"}`}>
-                        {item.meaning}
-                      </span>
+                        {selectedVocabIds.includes(item.id) && <Check className="w-3.5 h-3.5 text-white" />}
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="flex-1">
+                    {/* 👇 우측 상단 버튼 그룹 (편집 모드가 아닐 때만 보임) */}
+                    {!isVocabEditMode && (
+                      <div className="absolute top-3 right-3 flex items-center gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); toggleVocabMemorized(item.id, item.isMemorized || false); }}
+                          className={`p-1 rounded-md transition-colors cursor-pointer ${item.isMemorized ? "text-emerald-500 bg-emerald-50 opacity-100" : "text-slate-300 hover:text-emerald-500 hover:bg-slate-100"}`}
+                          title="암기 완료"
+                        >
+                          <Check className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); removeVocab(item.id); }}
+                          className="text-rose-400 hover:text-rose-600 hover:bg-rose-50 p-1 rounded-md transition-colors cursor-pointer"
+                          title="삭제"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
+
+                    {/* 👇 1. mb-1을 mb-2.5로 늘려서 날짜와 Q 사이의 간격을 벌려줍니다 */}
+                    <div className="flex justify-between items-start mb-2.5">
+                      <span className="text-[10px] font-medium text-slate-400">{item.date}</span>
+                    </div>
+
+                    {/* Q: 영단어 */}
+                    {/* 👇 2. 기존에 있던 억지스러운 -mt-2를 지우고, A와의 간격을 위해 mb-1.5를 줍니다 */}
+                    <div className="flex items-center gap-1.5 mb-1.5">
+                      <span className="shrink-0 bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded text-[10px] font-bold">Q</span>
+                      <h4 className={`text-lg font-bold transition-all ${item.isMemorized && !isVocabEditMode ? "text-slate-500 line-through" : "text-slate-800"}`}>
+                        {item.word}
+                      </h4>
+                      {/* 미니 TTS 버튼 */}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); playText(item.word, e); }}
+                        className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-md transition-colors cursor-pointer ml-1"
+                        title="발음 듣기"
+                      >
+                        <Volume2 className="w-4 h-4" />
+                      </button>
+                    </div>
+
+                    {/* A: 뜻과 품사 */}
+                    {/* 👇 3. mt-1은 지우거나 그대로 두어도 Q의 mb-1.5 덕분에 간격이 예쁘게 잡힙니다 */}
+                    <div className="flex items-center gap-2">
+                      <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${isVocabBlindMode && !isVocabEditMode ? "bg-slate-200 text-slate-400" : "bg-emerald-100 text-emerald-600"}`}>A</span>
+
+                      <div className={`flex items-center gap-2 transition-all duration-300 w-fit bg-slate-50 p-2 rounded-lg border border-slate-100 ${isVocabBlindMode && !isVocabEditMode ? "opacity-30 blur-[4px] select-none cursor-help hover:opacity-100 hover:blur-none" : ""}`}>
+                        <span className="bg-violet-100 text-violet-700 text-[10px] font-bold px-1.5 py-0.5 rounded">
+                          {item.pos}
+                        </span>
+                        <span className={`text-sm font-medium ${item.isMemorized && !isVocabEditMode ? "text-slate-400" : "text-slate-700"}`}>
+                          {item.meaning}
+                        </span>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1114,7 +1287,124 @@ export default function Home() {
             </div>
           )}
         </div>
+
+        {/* 👇 편집 모드일 때만 하단에 떠오르는 액션 바 */}
+        {isVocabEditMode && vocab.length > 0 && (
+          <div className="absolute bottom-0 left-0 w-full bg-white border-t border-slate-200 p-4 flex items-center justify-between shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] animate-in slide-in-from-bottom-5">
+            <button 
+              onClick={handleSelectAllVocab}
+              className="text-sm font-bold text-slate-600 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
+            >
+              {selectedVocabIds.length === vocab.length ? "전체 해제" : "전체 선택"}
+            </button>
+            <button 
+              onClick={handleDeleteSelectedVocab}
+              disabled={selectedVocabIds.length === 0}
+              className="text-sm font-bold bg-rose-500 hover:bg-rose-600 text-white px-5 py-2.5 rounded-xl transition-colors disabled:opacity-50 shadow-sm flex items-center gap-1.5 cursor-pointer"
+            >
+              삭제 ({selectedVocabIds.length})
+            </button>
+          </div>
+        )}
       </div>
+      {/* 👑 PRO 플랜 업그레이드 모달 */}
+      {showProModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl relative animate-in zoom-in-95 duration-200 overflow-hidden">
+            
+            {/* 배경 장식 (그라데이션 빛번짐) */}
+            <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 blur-3xl -z-10" />
+
+            {/* 닫기 버튼 */}
+            <button
+              onClick={() => setShowProModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 bg-white/50 rounded-full p-1 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            {/* 헤더 영역 */}
+            <div className="text-center mt-2 mb-6">
+              <div className="w-14 h-14 bg-gradient-to-br from-violet-600 to-fuchsia-600 rounded-2xl mx-auto flex items-center justify-center mb-3 shadow-lg shadow-violet-200">
+                <Crown className="w-7 h-7 text-white" />
+              </div>
+              <h3 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-fuchsia-600 mb-1.5">
+                Zipil PRO
+              </h3>
+              <p className="text-xs text-slate-500 font-medium">
+                더 강력한 AI 기능으로 영작 마스터가 되세요
+              </p>
+            </div>
+
+            {/* 혜택 리스트 */}
+            <div className="space-y-3 mb-8">
+              {[
+                { icon: '✨', text: '하루 5회 제한 없는 무제한 AI 영작 교정' },
+                { icon: '🧠', text: '내 약점을 파고드는 AI 맞춤형 심화 퀴즈' },
+                { icon: '🎙️', text: '원어민 수준의 정밀 발음 분석 및 피드백' },
+                { icon: '📥', text: '학습 기록장 및 단어장 PDF 리포트 추출' },
+              ].map((feature, idx) => (
+                <div key={idx} className="flex items-center gap-3 bg-slate-50 p-3 rounded-xl border border-slate-100">
+                  <span className="text-lg shrink-0">{feature.icon}</span>
+                  <span className="text-sm font-semibold text-slate-700">{feature.text}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* 가격 및 결제 버튼 */}
+            <div className="text-center mb-4">
+              <div className="flex items-end justify-center gap-1 mb-3">
+                <span className="text-3xl font-extrabold text-slate-900">₩9,900</span>
+                <span className="text-sm font-medium text-slate-500 mb-1">/ 월</span>
+              </div>
+              
+              <button
+                onClick={() => {
+                  toast.success("현재는 베타 서비스 기간으로 모든 기능이 무료로 제공됩니다! 🎉", { duration: 4000 });
+                  setShowProModal(false);
+                }}
+                className="w-full py-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white rounded-xl font-bold text-base transition-all shadow-lg shadow-violet-200 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
+              >
+                PRO 플랜 7일 무료 체험하기
+              </button>
+            </div>
+            <p className="text-center text-[10px] text-slate-400">
+              언제든지 취소할 수 있습니다.
+            </p>
+          </div>
+        </div>
+      )}
+      {/* 🚨 단어 다중 삭제 확인 모달 */}
+      {showVocabDeleteModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+            <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center mb-4">
+              <AlertCircle className="w-6 h-6 text-rose-600" />
+            </div>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">
+              선택한 단어를 삭제하시겠습니까?
+            </h3>
+            <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+              <span className="font-bold text-rose-600">{selectedVocabIds.length}개</span>의 단어가 영구적으로 삭제되며 복구할 수 없습니다.
+            </p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowVocabDeleteModal(false)}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-colors cursor-pointer"
+              >
+                취소
+              </button>
+              <button
+                onClick={executeDeleteVocab}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl transition-colors cursor-pointer flex items-center justify-center gap-1.5"
+              >
+                <X className="w-4 h-4" />
+                삭제하기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }

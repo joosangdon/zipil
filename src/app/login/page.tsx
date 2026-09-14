@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { Mail, Lock, Loader2 } from 'lucide-react';
 import Link from 'next/link';
+import toast from 'react-hot-toast';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -22,32 +23,51 @@ export default function LoginPage() {
 
   // 🚨 새롭게 추가된 이메일/비밀번호 로그인 로직
   const handleEmailLogin = async (e: React.FormEvent) => {
-    e.preventDefault(); // 엔터 쳤을 때 새로고침 방지
+    e.preventDefault(); 
     
     if (!email || !password) return alert("이메일과 비밀번호를 모두 입력해주세요.");
     setIsLoading(true);
 
     try {
-      const { data, error } = await supabase.auth.signInWithPassword({
+      const { data: authData, error } = await supabase.auth.signInWithPassword({
         email,
         password,
       });
 
       if (error) {
-        // 에러 종류에 따른 친절한 알림
-        if (error.message === "Invalid login credentials") {
-          alert("이메일 또는 비밀번호가 일치하지 않습니다.");
-        } else if (error.message === "Email not confirmed") {
-          alert("이메일 인증이 완료되지 않은 계정입니다.");
-        } else {
-          alert("로그인 중 오류가 발생했습니다.");
-        }
+        if (error.message === "Invalid login credentials") toast.error("이메일 또는 비밀번호가 일치하지 않습니다.");
+        else if (error.message === "Email not confirmed") toast.error("이메일 인증이 완료되지 않은 계정입니다.");
+        else toast.error("로그인 중 오류가 발생했습니다.");
         throw error;
       }
 
-      // 로그인 성공! 홈으로 이동
+      // 👇 [검문소 1] 로그인 성공 직후, DB에서 탈퇴 여부 확인
+      if (authData.user) {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('is_deleted')
+          .eq('id', authData.user.id)
+          .single();
+
+        if (profile?.is_deleted) {
+          const isRecover = confirm("탈퇴 대기 중인 계정입니다. (30일 유예 기간)\n\n탈퇴를 취소하고 계정을 복구하시겠습니까?");
+          
+          if (isRecover) {
+            // 복구 승인: DB에서 is_deleted를 false로 원상복구
+            await supabase.from('profiles').update({ is_deleted: false, deleted_at: null }).eq('id', authData.user.id);
+            alert("계정이 성공적으로 복구되었습니다! 환영합니다 🎉");
+          } else {
+            // 복구 거절: 다시 로그아웃시키고 함수 종료 (홈으로 안 넘어감)
+            await supabase.auth.signOut();
+            setIsLoading(false);
+            return;
+          }
+        }
+      }
+
+      // 정상 로그인 또는 복구 완료 시 홈으로 이동
       router.push('/');
-      router.refresh(); // 헤더 등 상태 업데이트를 위해 새로고침
+      router.refresh(); 
     } catch (err) {
       console.error(err);
     } finally {

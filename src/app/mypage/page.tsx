@@ -3,24 +3,32 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
-import { User, LogOut, Trash2, Edit2, ChevronLeft, Check, X, Loader2, Camera, RotateCcw } from 'lucide-react';
+import { User, LogOut, Trash2, Edit2, ChevronLeft, Check, X, Loader2, Camera, RotateCcw, AlertTriangle } from 'lucide-react';
 import Link from 'next/link';
 
 import Cropper from 'react-easy-crop';
 import getCroppedImg from '@/utils/cropImage'; // 경로가 다르면 맞게 수정해주세요
+
+// 1. 파일 맨 위 아이콘 모음에 AlertTriangle 추가, toast 불러오기
+import toast from 'react-hot-toast';
 
 export default function MyPage() {
   const router = useRouter();
   const [user, setUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
 
+  // 모달창 띄우기 상태 추가
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
   const [isEditingName, setIsEditingName] = useState(false); // 수정 모드인지 확인
   const [newName, setNewName] = useState(""); // 입력한 새 닉네임 저장
   const [isUpdatingName, setIsUpdatingName] = useState(false); // DB 저장 중 로딩 상태
 
-  // 👇 이미지 업로드를 위한 상태와 참조(Ref) 추가
+  // 이미지 업로드를 위한 상태와 참조(Ref) 추가
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [isUploadingImage, setIsUploadingImage] = useState(false);
+  // (이미지가 깨졌는지 여부를 기억하는 스위치)
+  const [avatarError, setAvatarError] = useState(false);
 
   // 👇 크롭 기능을 위한 상태들
   const [imageToCrop, setImageToCrop] = useState<string | null>(null); // 사용자가 선택한 원본 이미지
@@ -143,6 +151,36 @@ export default function MyPage() {
     router.push('/login');
   };
 
+  // 👇 회원 탈퇴 처리 함수 (Soft Delete 방식 - 30일 유예)
+  const executeDeleteAccount = async () => {
+    setIsLoading(true); 
+
+    try {
+      const { error: dbError } = await supabase
+        .from('profiles')
+        .update({ 
+          is_deleted: true, 
+          deleted_at: new Date().toISOString() 
+        })
+        .eq('id', user.id);
+
+      if (dbError) throw dbError;
+
+      // ❌ alert 대신 토스트 사용
+      toast.success("탈퇴 처리가 완료되었습니다. 30일 이내 로그인 시 복구 가능합니다.", { duration: 4000 });
+      await supabase.auth.signOut();
+      
+      // 모달 닫기 및 홈 이동
+      setShowDeleteModal(false);
+      router.push('/');
+    } catch (error) {
+      console.error(error);
+      toast.error("탈퇴 처리 중 오류가 발생했습니다.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-[#FAF9F6] flex items-center justify-center text-slate-500">
@@ -152,6 +190,19 @@ export default function MyPage() {
   }
 
   if (!user) return null;
+
+  // 💡 데이터베이스에서 직접 읽어서 '안전한' 이미지 주소만 골라내는 함수
+  const getProfileImage = () => {
+    const meta = user?.user_metadata;
+    const fallbackName = encodeURIComponent(meta?.display_name || meta?.full_name || 'U');
+    const uiAvatarUrl = `https://ui-avatars.com/api/?name=${fallbackName}&background=random`;
+
+    if (meta?.custom_avatar) return meta.custom_avatar;
+    if (meta?.avatar_url && meta.avatar_url.includes('pixabay')) return uiAvatarUrl;
+    if (meta?.avatar_url) return meta.avatar_url;
+    
+    return uiAvatarUrl;
+  };
 
   return (
     <main className="min-h-screen bg-[#FAF9F6] text-slate-800 flex flex-col items-center px-4 py-8 md:p-12">
@@ -177,12 +228,9 @@ export default function MyPage() {
             <div className="relative shrink-0 group">
               {/* 이미지는 custom_avatar가 있으면 그걸 쓰고, 없으면 구글 기본(avatar_url)을 씀 */}
               <img
-                src={user.user_metadata?.custom_avatar || user.user_metadata?.avatar_url || `https://ui-avatars.com/api/?name=${user.user_metadata?.display_name || 'U'}&background=random`}
+                src={getProfileImage()} // 함수 직접 호출 유지
                 alt="프로필 이미지"
-                // 🚨 최후의 방어막: src 링크가 깨졌을 때(에러 발생 시) 강제로 기본 이미지를 띄움
-                onError={(e) => {
-                  e.currentTarget.src = `https://ui-avatars.com/api/?name=${user.user_metadata?.display_name || 'U'}&background=random`;
-                }}
+                // 👇 클래스명만 마이페이지 원래 사이즈로 복구!
                 className={`w-24 h-24 md:w-28 md:h-28 rounded-full border-4 border-slate-50 shadow-md object-cover transition-opacity ${isUploadingImage ? 'opacity-50' : ''}`}
                 referrerPolicy="no-referrer"
               />
@@ -306,6 +354,7 @@ export default function MyPage() {
           </button>
 
           <button
+            onClick={() => setShowDeleteModal(true)} // 클릭 시 모달 열기!
             className="w-full flex items-center justify-between bg-white border border-rose-100 p-4 rounded-2xl hover:bg-rose-50 hover:border-rose-200 transition-all text-rose-600 shadow-sm group"
           >
             <div className="flex items-center gap-3 font-semibold">
@@ -316,7 +365,6 @@ export default function MyPage() {
             </div>
           </button>
         </div>
-
       </div>
       {/* 👇 이미지 크롭 모달창 (imageToCrop에 데이터가 들어오면 팝업됨) */}
       {imageToCrop && (
@@ -377,6 +425,43 @@ export default function MyPage() {
                 </button>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+      {/* 👇 2. 화면 맨 아래 (</main> 닫히기 직전)에 커스텀 모달 UI 추가 */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+            
+            <div className="w-12 h-12 rounded-full bg-rose-100 flex items-center justify-center mb-4">
+              <AlertTriangle className="w-6 h-6 text-rose-600" />
+            </div>
+            
+            <h3 className="text-lg font-bold text-slate-900 mb-2">
+              정말 탈퇴하시겠습니까?
+            </h3>
+            
+            <p className="text-sm text-slate-600 mb-6 leading-relaxed">
+              탈퇴 시 작성하신 데이터는 부정이용 방지 및 복구 지원을 위해 <span className="font-bold text-rose-600">30일간 보관된 후 영구 파기</span>되며, 이 기간 동안 동일한 이메일로 재가입할 수 없습니다.
+            </p>
+            
+            <div className="flex gap-3">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                disabled={isLoading}
+                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold rounded-xl transition-colors cursor-pointer disabled:opacity-50"
+              >
+                취소
+              </button>
+              <button
+                onClick={executeDeleteAccount}
+                disabled={isLoading}
+                className="flex-1 py-2.5 bg-rose-600 hover:bg-rose-700 text-white font-semibold rounded-xl transition-colors flex justify-center items-center gap-2 cursor-pointer disabled:opacity-50"
+              >
+                {isLoading ? '처리 중...' : '탈퇴하기'}
+              </button>
+            </div>
+            
           </div>
         </div>
       )}
