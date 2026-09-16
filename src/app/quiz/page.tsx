@@ -13,7 +13,7 @@ const DEFAULT_WORDS = [
   { word: "comprehensive", meaning: "포괄적인, 종합적인", pos: "형용사" },
   { word: "determine", meaning: "결정하다, 알아내다", pos: "동사" },
   { word: "crucial", meaning: "중대한, 결정적인", pos: "형용사" },
-  { word: "analyze", 단어: "분석하다", pos: "동사" },
+  { word: "analyze", meaning: "분석하다", pos: "동사" },
 ];
 
 const FALLBACK_SENTENCES: Record<string, {en: string, ko: string}> = {
@@ -139,14 +139,14 @@ export default function QuizPage() {
       const extraWords = shuffleArray(filteredDefaultWords).slice(0, neededCount);
       const combinedWords = shuffleArray([...myWords, ...extraWords]);
 
-      const allUniqueMeanings = Array.from(new Set([...myWords, ...DEFAULT_WORDS].map(item => item.meaning || item.단어)));
+      const allUniqueMeanings = Array.from(new Set([...myWords, ...DEFAULT_WORDS].map(item => item.meaning)));
 
       const generatedQuestions = combinedWords.map((correctItem) => {
         const wrongMeanings = shuffleArray(allUniqueMeanings)
-          .filter(meaning => meaning !== (correctItem.meaning || correctItem.단어))
+          .filter(meaning => meaning !== correctItem.meaning)
           .slice(0, 3);
-        const options = shuffleArray([(correctItem.meaning || correctItem.단어), ...wrongMeanings]);
-        return { word: correctItem.word, answer: (correctItem.meaning || correctItem.단어), pos: correctItem.pos, options };
+        const options = shuffleArray([correctItem.meaning, ...wrongMeanings]);
+        return { word: correctItem.word, answer: correctItem.meaning, pos: correctItem.pos, options };
       });
 
       setQuestions(generatedQuestions);
@@ -236,7 +236,7 @@ export default function QuizPage() {
         generatedQuestions.push({
           word: word,
           answer: word,
-          meaning: item.meaning || item.단어,
+          meaning: item.meaning,
           sentenceMeaning: matchedSentenceKo,
           originalSentence: matchedSentenceEn,
           maskedSentence: maskedSentence,
