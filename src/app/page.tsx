@@ -95,6 +95,23 @@ export default function Home() {
 
   const [timeUntilMidnight, setTimeUntilMidnight] = useState("");
 
+  const [isProUser, setIsProUser] = useState(false);
+
+  useEffect(() => {
+    const checkAdminStatus = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      const ADMIN_EMAILS = ['plimieom0@gmail.com', 'admin@zipil.com'];
+      
+      if (ADMIN_EMAILS.includes(user.email || '')) {
+        setIsProUser(true);
+      }
+    };
+    
+    checkAdminStatus();
+  }, []);
+
   // 👇 2. PRO 모달 상태 추가
   const [showProModal, setShowProModal] = useState(false);
 
@@ -611,16 +628,22 @@ export default function Home() {
       className="min-h-screen bg-[#FAF9F6] text-slate-800 flex flex-col items-center px-4 py-6 md:p-12 relative"
       onClick={() => setActiveTokenIdx(null)}
     >
-      {/* 👇 1. 헤더 가로폭 확장 (max-w-4xl -> max-w-5xl) */}
       <header className="w-full max-w-5xl flex items-center justify-between py-3 mb-6 md:mb-8">
-        <div className="flex items-center gap-2.5 md:gap-3">
-          <div className="w-9 h-9 md:w-10 md:h-10 rounded-xl bg-amber-100 border border-amber-200 flex items-center justify-center shadow-xs shrink-0">
-            <span className="font-bold text-amber-800 text-base md:text-lg tracking-wider">ㅈㅍㅈ</span>
+        <div className="flex items-center gap-3">
+          
+          {/* 인디케이터 로고 */}
+          <div className="flex items-center justify-center bg-white border border-slate-200 shadow-sm rounded-full px-3.5 py-1.5 shrink-0 cursor-default">
+            <span className="font-black text-slate-800 text-sm tracking-[0.2em] flex items-center gap-2 whitespace-nowrap pl-0.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
+              ㅈㅍㅈ
+            </span>
           </div>
-          <div>
-            <h1 className="text-lg md:text-xl font-bold tracking-tight text-slate-900 leading-tight">집필중 (Zipil)</h1>
-            <p className="text-[11px] md:text-xs text-slate-500">AI 영작 & 인터랙티브 발음 교정 워크스페이스</p>
-          </div>
+
+          <span className="text-slate-300 font-light text-lg hidden sm:block mb-0.5">/</span>
+
+          <h1 className="text-sm font-semibold text-slate-500 tracking-tight hidden sm:block">
+            AI 영작 & 인터랙티브 발음 교정 워크스페이스
+          </h1>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -644,20 +667,37 @@ export default function Home() {
               </span>
             )}
           </button>
-          <span className={`text-xs font-semibold px-2.5 py-1 md:px-3 md:py-1.5 rounded-full border transition-colors ${remainingCount > 0
-            ? "bg-violet-100 text-violet-700 border-violet-200"
-            : "bg-rose-100 text-rose-700 border-rose-200 animate-pulse"
-            }`}>
-            오늘 무료 {remainingCount}/{MAX_FREE_COUNT}
-          </span>
-          <button
-            onClick={() => setShowProModal(true)}
-            className="hidden md:flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-md hover:shadow-lg transition-all hover:scale-105"
-          >
-            <Crown className="w-3.5 h-3.5" />
-            PRO 업그레이드
-          </button>
-          <div className="h-4 w-px bg-slate-200 mx-1 hidden md:block"></div> {/* 구분선 */}
+          
+          {/* 👇 👑 1. PRO 유저면 클릭 가능한 PRO 뱃지 표시, 아니면 남은 횟수 표시 */}
+          {isProUser ? (
+            <button
+              onClick={() => setShowProModal(true)}
+              className="flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full border bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white border-transparent shadow-sm hover:shadow-md transition-all active:scale-95 cursor-pointer"
+              title="나의 PRO 혜택 보기"
+            >
+              <Crown className="w-3.5 h-3.5" />
+              PRO
+            </button>
+          ) : (
+            <span className={`text-xs font-semibold px-2.5 py-1 md:px-3 md:py-1.5 rounded-full border transition-colors ${remainingCount > 0
+              ? "bg-violet-100 text-violet-700 border-violet-200"
+              : "bg-rose-100 text-rose-700 border-rose-200 animate-pulse"
+              }`}>
+              오늘 무료 {remainingCount}/{MAX_FREE_COUNT}
+            </span>
+          )}
+
+          {/* 일반 유저용 PRO 업그레이드 버튼 */}
+          {!isProUser && (
+            <button
+              onClick={() => setShowProModal(true)}
+              className="hidden md:flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-md hover:shadow-lg transition-all hover:scale-105 cursor-pointer"
+            >
+              <Crown className="w-3.5 h-3.5" />
+              PRO 업그레이드
+            </button>
+          )}
+          <div className="h-4 w-px bg-slate-200 mx-1 hidden md:block"></div>
 
           {user ? (
             <Link href="/mypage" className="flex items-center gap-2 bg-white p-1 pr-3 rounded-full border border-slate-200 hover:border-violet-300 hover:ring-2 hover:ring-violet-100 transition-all shadow-sm shrink-0 cursor-pointer group">
@@ -687,10 +727,8 @@ export default function Home() {
         </div>
       </header>
 
-      {/* 👇 2. 워크스페이스 가로폭 및 간격 확장 (max-w-5xl, md:gap-8) */}
       <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8">
 
-        {/* 👇 3. 좌측 카드 패딩 및 높이 확장 (md:p-8, md:min-h-[600px]) */}
         <section className="bg-white p-5 md:p-8 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between min-h-[380px] md:min-h-[600px]">
           <div>
             <div className="flex items-center justify-between mb-3.5">
@@ -699,9 +737,7 @@ export default function Home() {
                 작성할 문장 (한글 또는 영문)
               </label>
               
-              {/* 글자 수 및 전체 삭제 버튼 그룹 */}
               <div className="flex items-center gap-3">
-                {/* 글자가 1자 이상일 때만 '전체 삭제' 버튼 표시 */}
                 {inputText.length > 0 && (
                   <button
                     onClick={() => setInputText("")}
@@ -713,15 +749,16 @@ export default function Home() {
                   </button>
                 )}
                 
-                <span className={`text-xs ${inputText.length > MAX_CHAR_LIMIT ? "text-rose-500 font-bold" : "text-slate-400"}`}>
-                  {inputText.length}/{MAX_CHAR_LIMIT}자
+                {/* 👇 👑 2. PRO 유저는 3000자, 일반은 300자로 렌더링 */}
+                <span className={`text-xs ${inputText.length > (isProUser ? 3000 : 300) ? "text-rose-500 font-bold" : "text-slate-400"}`}>
+                  {inputText.length}/{isProUser ? 3000 : 300}자
                 </span>
               </div>
             </div>
 
-            {/* 👇 4. 텍스트 입력창 높이 및 패딩 확장 (md:h-80, md:p-5) */}
+            {/* 👇 👑 3. 텍스트 영역 테두리 경고도 3000자기준으로 변경 */}
             <textarea
-              className={`w-full h-48 md:h-80 p-3.5 md:p-5 rounded-xl border focus:outline-hidden focus:ring-2 resize-none text-slate-800 text-sm leading-relaxed placeholder:text-slate-400 bg-slate-50/50 transition-all ${inputText.length > MAX_CHAR_LIMIT
+              className={`w-full h-48 md:h-80 p-3.5 md:p-5 rounded-xl border focus:outline-hidden focus:ring-2 resize-none text-slate-800 text-sm leading-relaxed placeholder:text-slate-400 bg-slate-50/50 transition-all ${inputText.length > (isProUser ? 3000 : 300)
                 ? "border-rose-300 focus:ring-rose-200"
                 : "border-slate-200 focus:ring-amber-300 focus:border-transparent"
                 }`}
@@ -738,18 +775,18 @@ export default function Home() {
             )}
           </div>
 
-          {/* 👇 이 부분 통째로 덮어쓰기 */}
           <div className="flex flex-col gap-2 mt-4">
+            {/* 👇 👑 4. PRO 유저면 횟수가 0이어도 버튼이 안 잠기도록 조건 우회 */}
             <button
               onClick={handleAnalyze}
-              disabled={loading || !inputText.trim() || inputText.length > MAX_CHAR_LIMIT || remainingCount === 0}
+              disabled={loading || !inputText.trim() || inputText.length > (isProUser ? 3000 : 300) || (!isProUser && remainingCount === 0)}
               className={`w-full py-3.5 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-colors shadow-xs active:scale-[0.99] ${
-                remainingCount === 0
+                !isProUser && remainingCount === 0
                   ? "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
                   : "bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white cursor-pointer disabled:cursor-not-allowed"
               }`}
             >
-              {remainingCount === 0 ? (
+              {!isProUser && remainingCount === 0 ? (
                 `⏳ 자정 충전까지 ${timeUntilMidnight}`
               ) : loading ? (
                 <>
@@ -764,8 +801,8 @@ export default function Home() {
               )}
             </button>
 
-            {/* 복습 전용 모드 안내 */}
-            {remainingCount === 0 && (
+            {/* 👇 👑 5. PRO 유저면 안내문구 숨김 */}
+            {!isProUser && remainingCount === 0 && (
               <p className="text-center text-xs text-slate-500 font-medium animate-pulse mt-1">
                 오늘 무료 분석을 모두 사용했습니다. 상단의 <span className="font-bold text-violet-600">내 학습 기록장</span>에서 복습해 보세요!
               </p>
@@ -773,15 +810,10 @@ export default function Home() {
           </div>
         </section>
 
-        {/* 우측: 분석 및 발음 트레이닝 카드 */}
+        {/* --- 우측: 분석 및 발음 트레이닝 카드 (이하 수정 없음 그대로 유지) --- */}
         <section className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between min-h-[380px] md:min-h-[480px]">
           <div className="space-y-3.5">
-            {/* 상단 컨트롤러 */}
-            {/* 👇 justify-between을 justify-end로 변경하여 버튼들을 우측으로 깔끔하게 밀어줍니다 */}
             <div className="flex items-center justify-end border-b border-slate-100 pb-3 min-h-[44px]">
-
-              {/* 덩그러니 있던 체크 아이콘 영역은 완전히 삭제했습니다! */}
-
               <div className="flex items-center gap-1.5 md:gap-2">
                 {result && (
                   <>
@@ -864,7 +896,7 @@ export default function Home() {
                                     e.stopPropagation();
                                     addToVocab(token.word, token.meaning, token.pos);
                                   }}
-                                  className="ml-1 bg-slate-700 hover:bg-amber-500 text-white rounded-full w-5 h-5 flex items-center justify-center transition-colors shadow-sm"
+                                  className="ml-1 bg-slate-700 hover:bg-amber-500 text-white rounded-full w-5 h-5 flex items-center justify-center transition-colors shadow-sm cursor-pointer"
                                   title="단어장에 추가"
                                 >
                                   +
@@ -977,7 +1009,6 @@ export default function Home() {
 
       </div>
 
-      {/* 무료 사용량 모달 */}
       {showLimitModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl border border-slate-100 relative animate-in fade-in zoom-in-95 duration-150">
@@ -1006,7 +1037,6 @@ export default function Home() {
         </div>
       )}
 
-      {/* 학습 기록장 모달 */}
       {showHistory && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-xs flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] flex flex-col shadow-2xl border border-slate-100 relative animate-in fade-in zoom-in-95 duration-150">
@@ -1042,21 +1072,14 @@ export default function Home() {
               ) : (
                 <div className="space-y-4">
                   {history.map((item) => {
-                    // 👇 1. 스마트 판별 로직 추가
-                    // 알파벳만 남겨서 대소문자/특수기호 무시하고 두 문장이 같은지 비교
                     const cleanOriginal = item.originalText.toLowerCase().replace(/[^a-z]/g, '');
                     const cleanCorrected = item.correctedText.toLowerCase().replace(/[^a-z]/g, '');
-
-                    // 영어를 입력했는데 완벽해서 교정할 게 없는 경우 (Q와 A가 사실상 같음)
                     const isPerfectEnglish = cleanOriginal === cleanCorrected && cleanOriginal.length > 0;
-
-                    // 애초에 한글 문장을 입력해서 번역기로 쓴 경우 (Q가 한글임)
                     const isKoreanInput = /[ㄱ-ㅎ|ㅏ-ㅣ|가-힣]/.test(item.originalText);
 
                     return (
                       <div key={item.id} className={`p-4 rounded-xl border shadow-sm flex flex-col gap-2 relative group transition-all duration-300 ${item.isMemorized ? "bg-slate-100 border-slate-200 opacity-60 grayscale-[50%]" : "bg-white border-slate-200"
                         }`}>
-                        {/* --- 상단 날짜 및 암기완료 버튼 (기존과 동일) --- */}
                         <div className="flex justify-between items-start mb-1">
                           <span className="text-[10px] font-medium text-slate-400">{item.date}</span>
                           <button
@@ -1069,33 +1092,27 @@ export default function Home() {
                           </button>
                         </div>
 
-                        {/* --- Q 영역 (기존과 동일) --- */}
                         <div className="flex items-start gap-1.5 -mt-3">
                           <span className="shrink-0 bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded text-[10px] font-bold mt-0.5">Q</span>
                           <p className="text-xs text-slate-600 font-medium leading-relaxed">{item.originalText}</p>
                         </div>
 
-                        {/* 👇 2. A 영역 (스마트 렌더링 적용) */}
                         <div className="flex items-start gap-1.5 mt-0.5">
                           <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold mt-0.5 transition-colors ${isHistoryBlindMode ? "bg-slate-200 text-slate-400" : "bg-violet-100 text-violet-600"
                             }`}>A</span>
 
                           <div className="flex-1 flex flex-col">
                             {isPerfectEnglish ? (
-                              /* 🟢 케이스 1: 완벽한 영어 -> 중복 영어를 숨기고 '한글 해석'만 렌더링 */
                               <p className={`text-sm font-bold transition-all duration-300 ${isHistoryBlindMode ? "text-transparent bg-slate-200 rounded blur-[5px] select-none cursor-help hover:text-slate-800 hover:bg-transparent hover:blur-none" : "text-slate-800"
                                 }`}>
                                 {item.koreanTranslation || item.correctedText}
                               </p>
                             ) : (
-                              /* 🟢 케이스 2: 교정되었거나 한글을 번역한 경우 -> '교정된 영어' 렌더링 */
                               <>
                                 <p className={`text-sm font-bold transition-all duration-300 ${isHistoryBlindMode ? "text-transparent bg-slate-200 rounded blur-[5px] select-none cursor-help hover:text-slate-800 hover:bg-transparent hover:blur-none" : "text-slate-800"
                                   }`}>
                                   {item.correctedText}
                                 </p>
-
-                                {/* 한글 뜻은 '한글 입력'이 아닐 때만 아래에 추가로 표시 (중복 방지) */}
                                 {!isKoreanInput && item.koreanTranslation && (
                                   <p className={`text-[11px] mt-0.5 font-medium transition-all duration-300 ${isHistoryBlindMode ? "text-transparent bg-slate-200 rounded blur-[4px] select-none cursor-help hover:text-slate-600 hover:bg-transparent hover:blur-none" : "text-violet-600/80"
                                     }`}>
@@ -1106,7 +1123,6 @@ export default function Home() {
                             )}
                           </div>
 
-                          {/* 미니 TTS 버튼 (화면엔 한글이 떠도, 읽어주는 건 정답 영어를 읽어줍니다!) */}
                           <button
                             onClick={(e) => playText(item.correctedText, e)}
                             className="shrink-0 p-1.5 text-violet-400 hover:text-violet-600 hover:bg-violet-50 rounded-md transition-colors cursor-pointer"
@@ -1116,7 +1132,6 @@ export default function Home() {
                           </button>
                         </div>
 
-                        {/* --- 뉘앙스 노트 영역 (기존과 동일) --- */}
                         {!isHistoryBlindMode && (
                           <div className="mt-1.5 text-[11px] text-slate-600 bg-slate-50 p-2.5 rounded-lg border border-slate-100 leading-relaxed animate-in fade-in duration-300">
                             <span className="font-semibold text-slate-700 block mb-1">💡 뉘앙스 노트</span>
@@ -1159,14 +1174,13 @@ export default function Home() {
               <span className="text-lg">📚</span>
               내 단어장
             </h3>
-            {/* 👇 기존 블라인드 버튼 옆에 '편집' 버튼 추가! */}
             {vocab.length > 0 && (
               <button
                 onClick={() => {
                   setIsVocabEditMode(!isVocabEditMode);
-                  setSelectedVocabIds([]); // 편집 모드 끄거나 켤 때 선택 초기화
+                  setSelectedVocabIds([]);
                 }}
-                className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-colors ${
+                className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
                   isVocabEditMode ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
                 }`}
               >
@@ -1176,7 +1190,7 @@ export default function Home() {
             {!isVocabEditMode && (
             <button
               onClick={() => setIsVocabBlindMode(!isVocabBlindMode)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all ${isVocabBlindMode ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${isVocabBlindMode ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
                 }`}
             >
               {isVocabBlindMode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
@@ -1192,7 +1206,6 @@ export default function Home() {
           </button>
         </div>
 
-        {/* 단어 리스트 영역 */}
         <div className="p-4 overflow-y-auto flex-1 relative pb-20">
           {vocab.length === 0 ? (
             <div className="h-full flex flex-col items-center justify-center text-slate-400 gap-2">
@@ -1208,12 +1221,11 @@ export default function Home() {
                 <div 
                   key={item.id} 
                   onClick={() => isVocabEditMode && toggleVocabSelection(item.id)}
-                  className={`p-4 rounded-xl border shadow-sm flex relative transition-all duration-300 ${
+                  className={`group p-4 rounded-xl border shadow-sm flex relative transition-all duration-300 ${
                     item.isMemorized && !isVocabEditMode ? "bg-slate-100 border-slate-200 opacity-60 grayscale-[50%]" : "bg-white border-slate-200"
                   } ${isVocabEditMode ? "cursor-pointer hover:border-violet-300" : ""}`}
                 >
                   
-                  {/* 👇 편집 모드일 때 좌측에 보여줄 체크박스 */}
                   {isVocabEditMode && (
                     <div className="flex items-center justify-center mr-3">
                       <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
@@ -1225,7 +1237,6 @@ export default function Home() {
                   )}
 
                   <div className="flex-1">
-                    {/* 👇 우측 상단 버튼 그룹 (편집 모드가 아닐 때만 보임) */}
                     {!isVocabEditMode && (
                       <div className="absolute top-3 right-3 flex items-center gap-1 md:opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
@@ -1245,19 +1256,15 @@ export default function Home() {
                       </div>
                     )}
 
-                    {/* 👇 1. mb-1을 mb-2.5로 늘려서 날짜와 Q 사이의 간격을 벌려줍니다 */}
                     <div className="flex justify-between items-start mb-2.5">
                       <span className="text-[10px] font-medium text-slate-400">{item.date}</span>
                     </div>
 
-                    {/* Q: 영단어 */}
-                    {/* 👇 2. 기존에 있던 억지스러운 -mt-2를 지우고, A와의 간격을 위해 mb-1.5를 줍니다 */}
                     <div className="flex items-center gap-1.5 mb-1.5">
                       <span className="shrink-0 bg-slate-100 text-slate-400 px-1.5 py-0.5 rounded text-[10px] font-bold">Q</span>
                       <h4 className={`text-lg font-bold transition-all ${item.isMemorized && !isVocabEditMode ? "text-slate-500 line-through" : "text-slate-800"}`}>
                         {item.word}
                       </h4>
-                      {/* 미니 TTS 버튼 */}
                       <button
                         onClick={(e) => { e.stopPropagation(); playText(item.word, e); }}
                         className="p-1.5 text-slate-400 hover:text-violet-600 hover:bg-violet-50 rounded-md transition-colors cursor-pointer ml-1"
@@ -1267,8 +1274,6 @@ export default function Home() {
                       </button>
                     </div>
 
-                    {/* A: 뜻과 품사 */}
-                    {/* 👇 3. mt-1은 지우거나 그대로 두어도 Q의 mb-1.5 덕분에 간격이 예쁘게 잡힙니다 */}
                     <div className="flex items-center gap-2">
                       <span className={`shrink-0 px-1.5 py-0.5 rounded text-[10px] font-bold transition-colors ${isVocabBlindMode && !isVocabEditMode ? "bg-slate-200 text-slate-400" : "bg-emerald-100 text-emerald-600"}`}>A</span>
 
@@ -1288,7 +1293,6 @@ export default function Home() {
           )}
         </div>
 
-        {/* 👇 편집 모드일 때만 하단에 떠오르는 액션 바 */}
         {isVocabEditMode && vocab.length > 0 && (
           <div className="absolute bottom-0 left-0 w-full bg-white border-t border-slate-200 p-4 flex items-center justify-between shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] animate-in slide-in-from-bottom-5">
             <button 
@@ -1307,23 +1311,20 @@ export default function Home() {
           </div>
         )}
       </div>
-      {/* 👑 PRO 플랜 업그레이드 모달 */}
+      {/* 👑 PRO 플랜 업그레이드 / 혜택 안내 모달 */}
       {showProModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl relative animate-in zoom-in-95 duration-200 overflow-hidden">
             
-            {/* 배경 장식 (그라데이션 빛번짐) */}
             <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 blur-3xl -z-10" />
 
-            {/* 닫기 버튼 */}
             <button
               onClick={() => setShowProModal(false)}
-              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 bg-white/50 rounded-full p-1 transition-colors"
+              className="absolute top-4 right-4 text-slate-400 hover:text-slate-700 bg-white/50 rounded-full p-1 transition-colors cursor-pointer"
             >
               <X className="w-5 h-5" />
             </button>
 
-            {/* 헤더 영역 */}
             <div className="text-center mt-2 mb-6">
               <div className="w-14 h-14 bg-gradient-to-br from-violet-600 to-fuchsia-600 rounded-2xl mx-auto flex items-center justify-center mb-3 shadow-lg shadow-violet-200">
                 <Crown className="w-7 h-7 text-white" />
@@ -1331,12 +1332,12 @@ export default function Home() {
               <h3 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-fuchsia-600 mb-1.5">
                 Zipil PRO
               </h3>
+              {/* 👇 PRO 유저 여부에 따라 안내 문구 변경 */}
               <p className="text-xs text-slate-500 font-medium">
-                더 강력한 AI 기능으로 영작 마스터가 되세요
+                {isProUser ? "회원님은 현재 아래의 모든 혜택을 누리고 있습니다!" : "더 강력한 AI 기능으로 영작 마스터가 되세요"}
               </p>
             </div>
 
-            {/* 혜택 리스트 */}
             <div className="space-y-3 mb-8">
               {[
                 { icon: '✨', text: '하루 5회 제한 없는 무제한 AI 영작 교정' },
@@ -1351,26 +1352,37 @@ export default function Home() {
               ))}
             </div>
 
-            {/* 가격 및 결제 버튼 */}
             <div className="text-center mb-4">
-              <div className="flex items-end justify-center gap-1 mb-3">
-                <span className="text-3xl font-extrabold text-slate-900">₩9,900</span>
-                <span className="text-sm font-medium text-slate-500 mb-1">/ 월</span>
-              </div>
-              
-              <button
-                onClick={() => {
-                  toast.success("현재는 베타 서비스 기간으로 모든 기능이 무료로 제공됩니다! 🎉", { duration: 4000 });
-                  setShowProModal(false);
-                }}
-                className="w-full py-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white rounded-xl font-bold text-base transition-all shadow-lg shadow-violet-200 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0"
-              >
-                PRO 플랜 7일 무료 체험하기
-              </button>
+              {/* 👇 PRO 유저라면 가격과 결제 버튼 대신 '확인' 버튼만 노출 */}
+              {isProUser ? (
+                <button
+                  onClick={() => setShowProModal(false)}
+                  className="w-full py-3.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-sm transition-all cursor-pointer"
+                >
+                  확인 (혜택 이용 중)
+                </button>
+              ) : (
+                <>
+                  <div className="flex items-end justify-center gap-1 mb-3">
+                    <span className="text-3xl font-extrabold text-slate-900">₩9,900</span>
+                    <span className="text-sm font-medium text-slate-500 mb-1">/ 월</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      toast.success("현재는 베타 서비스 기간으로 모든 기능이 무료로 제공됩니다! 🎉", { duration: 4000 });
+                      setShowProModal(false);
+                    }}
+                    className="w-full py-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white rounded-xl font-bold text-base transition-all shadow-lg shadow-violet-200 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
+                  >
+                    PRO 플랜 7일 무료 체험하기
+                  </button>
+                  <p className="text-center text-[10px] text-slate-400 mt-3">
+                    언제든지 취소할 수 있습니다.
+                  </p>
+                </>
+              )}
             </div>
-            <p className="text-center text-[10px] text-slate-400">
-              언제든지 취소할 수 있습니다.
-            </p>
+            
           </div>
         </div>
       )}
