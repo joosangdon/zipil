@@ -61,15 +61,15 @@ export default function LoginPage() {
   return (
     <main className="min-h-screen w-full flex bg-white">
       
-      {/* 🚀 왼쪽 영역: 브랜딩 및 미니 랜딩 (모바일에서는 숨김, lg 사이즈 이상에서만 절반 차지) */}
+      {/* 🚀 왼쪽 영역: 브랜딩 및 미니 랜딩 */}
       <div className="hidden lg:flex flex-col justify-between lg:w-3/5 bg-slate-900 p-12 xl:p-24 relative overflow-hidden">
         {/* 배경 화려한 그라데이션 조명 효과 */}
         <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-violet-600/30 rounded-full blur-[100px] pointer-events-none" />
         <div className="absolute bottom-[-10%] right-[-10%] w-[400px] h-[400px] bg-fuchsia-600/20 rounded-full blur-[100px] pointer-events-none" />
 
-        {/* 제안 3: 모던 미니멀 인디케이터 (토스 스타일 심플함) */}
+        {/* 미니멀 인디케이터 로고 */}
         <div className="relative z-10 flex items-center gap-3">
-          <div className="flex items-center justify-center bg-white/10 backdrop-blur-md border border-white/20 rounded-full px-4 py-2">
+          <div className="flex items-center justify-center bg-white/10 backdrop-blur-md border border-white/20 rounded-full px-4 py-2 shadow-[0_0_15px_rgba(255,255,255,0.05)]">
             <span className="font-black text-white text-base tracking-[0.2em] flex items-center gap-2 whitespace-nowrap">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
               ㅈㅍㅈ
@@ -87,35 +87,34 @@ export default function LoginPage() {
             단순한 번역을 넘어 문맥에 맞는 뉘앙스 교정과 원어민 수준의 정밀한 발음 피드백까지 한 번에 경험하세요.
           </p>
 
-          {/* 공중에 떠 있는 듯한 기능 뱃지들 */}
+          {/* 👇 개선 1: Hover 이펙트가 추가된 피처 카드 (은은한 Glow 효과 추가) */}
           <div className="space-y-4">
-            <div className="flex items-center gap-4 bg-white/10 backdrop-blur-md border border-white/10 p-4 rounded-2xl w-max transform hover:-translate-y-1 transition-transform cursor-default">
-              <div className="p-2 bg-violet-500/20 rounded-lg"><Sparkles className="w-5 h-5 text-violet-300" /></div>
+            <div className="group flex items-center gap-4 bg-white/5 backdrop-blur-md border border-white/10 p-4 rounded-2xl w-max transform hover:-translate-y-1 hover:border-violet-500/50 hover:bg-white/10 hover:shadow-[0_0_20px_rgba(139,92,246,0.15)] transition-all duration-300 cursor-default">
+              <div className="p-2 bg-violet-500/20 rounded-lg group-hover:scale-110 transition-transform duration-300"><Sparkles className="w-5 h-5 text-violet-300" /></div>
               <div>
                 <p className="text-white font-bold text-sm">무제한 AI 문장 교정</p>
-                <p className="text-slate-400 text-xs">문법과 뉘앙스를 완벽하게</p>
+                <p className="text-slate-400 text-xs group-hover:text-slate-300 transition-colors">문법과 뉘앙스를 완벽하게</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-4 bg-white/10 backdrop-blur-md border border-white/10 p-4 rounded-2xl w-max ml-8 transform hover:-translate-y-1 transition-transform cursor-default">
-              <div className="p-2 bg-emerald-500/20 rounded-lg"><Mic className="w-5 h-5 text-emerald-300" /></div>
+            <div className="group flex items-center gap-4 bg-white/5 backdrop-blur-md border border-white/10 p-4 rounded-2xl w-max ml-8 transform hover:-translate-y-1 hover:border-emerald-500/50 hover:bg-white/10 hover:shadow-[0_0_20px_rgba(16,185,129,0.15)] transition-all duration-300 cursor-default">
+              <div className="p-2 bg-emerald-500/20 rounded-lg group-hover:scale-110 transition-transform duration-300"><Mic className="w-5 h-5 text-emerald-300" /></div>
               <div>
                 <p className="text-white font-bold text-sm">실전 발음 트레이닝</p>
-                <p className="text-slate-400 text-xs">내 발음을 원어민과 비교 분석</p>
+                <p className="text-slate-400 text-xs group-hover:text-slate-300 transition-colors">내 발음을 원어민과 비교 분석</p>
               </div>
             </div>
 
-            <div className="flex items-center gap-4 bg-white/10 backdrop-blur-md border border-white/10 p-4 rounded-2xl w-max transform hover:-translate-y-1 transition-transform cursor-default">
-              <div className="p-2 bg-rose-500/20 rounded-lg"><BrainCircuit className="w-5 h-5 text-rose-300" /></div>
+            <div className="group flex items-center gap-4 bg-white/5 backdrop-blur-md border border-white/10 p-4 rounded-2xl w-max transform hover:-translate-y-1 hover:border-rose-500/50 hover:bg-white/10 hover:shadow-[0_0_20px_rgba(244,63,94,0.15)] transition-all duration-300 cursor-default">
+              <div className="p-2 bg-rose-500/20 rounded-lg group-hover:scale-110 transition-transform duration-300"><BrainCircuit className="w-5 h-5 text-rose-300" /></div>
               <div>
                 <p className="text-white font-bold text-sm">오답 기반 맞춤 퀴즈</p>
-                <p className="text-slate-400 text-xs">틀렸던 단어만 쏙쏙 골라 복습</p>
+                <p className="text-slate-400 text-xs group-hover:text-slate-300 transition-colors">틀렸던 단어만 쏙쏙 골라 복습</p>
               </div>
             </div>
           </div>
         </div>
 
-        {/* 카피라이트 */}
         <p className="relative z-10 text-xs text-slate-500 font-medium">
           © 2026 Zipil Workspace. All rights reserved.
         </p>
@@ -123,7 +122,7 @@ export default function LoginPage() {
 
       {/* 🚀 오른쪽 영역: 로그인 폼 */}
       <div className="flex-1 flex flex-col justify-center items-center p-8 sm:p-12 bg-[#FAF9F6] relative">
-        {/* 모바일에서만 보이는 미니 로고 (데스크탑에선 숨김) */}
+        {/* 모바일 미니 로고 */}
         <div className="absolute top-8 left-8 lg:hidden flex items-center gap-2.5">
           <div className="w-8 h-8 rounded-lg bg-amber-100 border border-amber-200 flex items-center justify-center">
             <span className="font-bold text-amber-800 text-sm tracking-wider">ㅈㅍㅈ</span>
@@ -140,26 +139,27 @@ export default function LoginPage() {
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
-            <div className="relative">
-              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+            {/* 👇 개선 2: Focus 상태 시각화 (아이콘 색상 변환 + 테두리/그림자 강조) */}
+            <div className="relative group">
+              <Mail className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-violet-600 transition-colors w-5 h-5" />
               <input 
                 type="email" 
                 value={email} 
                 onChange={(e) => setEmail(e.target.value)} 
                 placeholder="이메일 주소" 
-                className="w-full pl-11 pr-4 py-3.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 font-medium transition-shadow" 
+                className="w-full pl-11 pr-4 py-3.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-500/20 font-medium transition-all" 
                 required 
               />
             </div>
             
-            <div className="relative">
-              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 w-5 h-5" />
+            <div className="relative group">
+              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-violet-600 transition-colors w-5 h-5" />
               <input 
                 type="password" 
                 value={password} 
                 onChange={(e) => setPassword(e.target.value)} 
                 placeholder="비밀번호" 
-                className="w-full pl-11 pr-4 py-3.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-violet-500 font-medium transition-shadow" 
+                className="w-full pl-11 pr-4 py-3.5 bg-white border border-slate-200 rounded-xl focus:outline-none focus:border-violet-500 focus:ring-4 focus:ring-violet-500/20 font-medium transition-all" 
                 required 
               />
             </div>
@@ -193,12 +193,21 @@ export default function LoginPage() {
             Google 계정으로 계속하기
           </button>
 
-          <p className="text-center text-sm text-slate-500 font-medium">
+          <p className="text-center text-sm text-slate-500 font-medium mb-8">
             아직 계정이 없으신가요?{' '}
             <Link href="/signup" className="text-violet-600 font-bold hover:text-violet-700 hover:underline underline-offset-4 transition-all">
               무료로 회원가입
             </Link>
           </p>
+
+          {/* 👇 개선 3: 게스트 모드 진입 링크 추가 (이탈률 방지) */}
+          <div className="pt-6 border-t border-slate-200 flex justify-center">
+            <Link href="/" className="group flex items-center gap-1.5 text-sm font-semibold text-slate-400 hover:text-slate-800 transition-colors">
+              로그인 없이 서비스 둘러보기
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+            </Link>
+          </div>
+
         </div>
       </div>
     </main>

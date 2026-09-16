@@ -4,6 +4,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Play, Bookmark, RotateCcw, Gamepad2, Brain, Mic, Timer, Lock, Crown, ChevronRight, X, ChevronLeft, Send, CheckCircle2, XCircle, Volume2, Eye, ArrowRight } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useRouter } from 'next/navigation';
 
 const DEFAULT_WORDS = [
   { word: "consistency", meaning: "일관성", pos: "명사" },
@@ -30,26 +31,31 @@ const FALLBACK_SENTENCES: Record<string, {en: string, ko: string}> = {
 const shuffleArray = (array: any[]) => [...array].sort(() => Math.random() - 0.5);
 
 export default function QuizPage() {
+  const router = useRouter();
   const [activeView, setActiveView] = useState<'dashboard' | 'word-quiz' | 'weakness-quiz'>('dashboard');
   const [showProModal, setShowProModal] = useState(false);
+  
+  // 👇 1. 유저 로그인 상태를 저장할 State 추가
+  const [user, setUser] = useState<any>(null); 
   const [isProUser, setIsProUser] = useState(false);
 
   useEffect(() => {
-    // 앱이 켜질 때 로그인한 유저가 '관리자'인지 확인하는 함수
-    const checkAdminStatus = async () => {
+    const checkUserStatus = async () => {
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return;
-
-      // 👑 여기에 유저님(관리자)의 실제 가입 이메일을 적어주세요!
-      const ADMIN_EMAILS = ['plimieom0@gmail.com', 'admin@zipil.com']; 
       
-      // 내 이메일이 관리자 리스트에 있다면 무조건 PRO 유저로 승격!
+      // 👇 2. 비회원이면 여기서 멈춤 (user 상태는 null로 유지됨)
+      if (!user) return; 
+
+      // 회원이면 user 상태 저장
+      setUser(user);
+
+      const ADMIN_EMAILS = ['plimieom0@gmail.com', 'admin@zipil.com']; 
       if (ADMIN_EMAILS.includes(user.email || '')) {
         setIsProUser(true);
       }
     };
     
-    checkAdminStatus();
+    checkUserStatus();
   }, []);
 
   const [isPlaying, setIsPlaying] = useState(false);
@@ -60,11 +66,9 @@ export default function QuizPage() {
   const [isFinished, setIsFinished] = useState(false);
   const [wrongQuestions, setWrongQuestions] = useState<any[]>([]);
   
-  // 객관식 퀴즈 전용 상태
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [isRevealed, setIsRevealed] = useState(false);
 
-  // --- 🚀 심화 타이핑 퀴즈 전용 상태 ---
   const [typingInput, setTypingInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const [showHint, setShowHint] = useState(false);
@@ -83,7 +87,7 @@ export default function QuizPage() {
     },
     {
       id: 'weakness',
-      title: 'AI 오답 노트 (심화)',
+      title: '나만의 맞춤 영작 퀴즈',
       description: '기록장에서 내가 썼던 문장을 AI가 빈칸 문제로 변형합니다.',
       icon: <Brain className="w-8 h-8 text-rose-500" />,
       isPro: false,
@@ -91,16 +95,18 @@ export default function QuizPage() {
     },
     {
       id: 'speaking',
-      title: '실전 발음 트레이닝',
-      description: '문장을 읽고 원어민 AI에게 실시간 억양 및 발음 점수를 평가받습니다.',
+      // 👇 유저님 아이디어 적용!
+      title: 'AI 뉘앙스 스피킹', 
+      description: '제시된 상황에 맞는 문장을 마이크로 말하고, AI에게 뉘앙스를 교정받으세요.',
       icon: <Mic className="w-8 h-8 text-emerald-500" />,
       isPro: true,
       color: 'bg-emerald-50 border-emerald-200 hover:border-emerald-400',
     },
     {
       id: 'timeattack',
-      title: '타임어택 챌린지',
-      description: '제한 시간 3분 안에 최대한 많은 영작 문장을 완성해야 하는 서바이벌!',
+      // 👇 도파민 터지는 서바이벌 컨셉으로 설명 강화!
+      title: '서바이벌 타임어택', 
+      description: '제한 시간 60초! 빠르고 정확하게 영작하여 시간을 늘려가는 생존 게임입니다.',
       icon: <Timer className="w-8 h-8 text-amber-500" />,
       isPro: true,
       color: 'bg-amber-50 border-amber-200 hover:border-amber-400',
@@ -108,6 +114,14 @@ export default function QuizPage() {
   ];
 
   const handleCardClick = (mode: typeof quizModes[0]) => {
+    // 👇 3. 가장 먼저 '비회원'인지 검사하여 차단
+    if (!user) {
+      toast.error("학습 퀴즈는 로그인 후 이용할 수 있습니다.\n3초 만에 가입하고 내 실력을 테스트해보세요!", { duration: 4000 });
+      // 원한다면 아래 주석을 풀어서 로그인 페이지로 바로 튕기게 할 수도 있습니다.
+      // router.push('/login'); 
+      return;
+    }
+
     if (mode.isPro && !isProUser) {
       setShowProModal(true); 
     } else if (mode.id === 'word-quiz') {
@@ -125,7 +139,6 @@ export default function QuizPage() {
     window.speechSynthesis.speak(utterance);
   };
 
-  // --- 기존 기능 (단어장 퀴즈) ---
   const startQuiz = async () => {
     setIsLoading(true);
     try {
@@ -186,7 +199,6 @@ export default function QuizPage() {
     }, 1000);
   };
 
-  // --- 🚀 AI 오답 노트 (빈칸 타이핑) 로직 ---
   const startWeaknessQuiz = async () => {
     setIsLoading(true);
     try {
@@ -221,7 +233,7 @@ export default function QuizPage() {
           matchedSentenceEn = historyMatch.corrected_text;
           matchedSentenceKo = historyMatch.original_text || "(사용자가 과거에 직접 작성했던 영작 문장입니다)";
         } else {
-          const wordMeaning = item.meaning || item.단어 || "";
+          const wordMeaning = item.meaning || "";
           const fallback = FALLBACK_SENTENCES[word] || { 
             en: `I need to memorize the word '${word}'.`, 
             ko: `나는 '${wordMeaning}'(이)라는 단어를 외워야 한다.` 
@@ -374,39 +386,48 @@ export default function QuizPage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
-            {quizModes.map((mode) => (
-              <div
-                key={mode.id}
-                onClick={() => handleCardClick(mode)}
-                className={`relative p-6 md:p-8 rounded-3xl border transition-all duration-300 cursor-pointer shadow-sm group overflow-hidden bg-white
-                  ${mode.isPro && !isProUser 
-                    ? 'border-slate-200 opacity-80 grayscale-[30%] hover:grayscale-0 hover:shadow-md' 
-                    : `border-transparent hover:shadow-lg ${mode.color}` 
-                  }`}
-              >
-                {mode.isPro && !isProUser && (
-                  <div className="absolute top-4 right-4 bg-slate-800/90 backdrop-blur-md text-white px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-bold shadow-md z-10">
-                    <Lock className="w-3 h-3 text-amber-300" />
-                    <span>PRO 전용</span>
+            {quizModes.map((mode) => {
+              // 👇 4. 카드 잠금(Lock) 상태 결정 로직
+              // 유저가 아예 없거나(게스트), PRO 전용인데 PRO가 아니면 모두 잠금 처리!
+              const isLocked = (!user) || (mode.isPro && !isProUser);
+
+              return (
+                <div
+                  key={mode.id}
+                  onClick={() => handleCardClick(mode)}
+                  className={`relative p-6 md:p-8 rounded-3xl border transition-all duration-300 cursor-pointer shadow-sm group overflow-hidden bg-white
+                    ${isLocked 
+                      ? 'border-slate-200 opacity-80 grayscale-[30%] hover:grayscale-0 hover:shadow-md' 
+                      : `border-transparent hover:shadow-lg ${mode.color}` 
+                    }`}
+                >
+                  {/* 자물쇠 뱃지 렌더링 */}
+                  {isLocked && (
+                    <div className="absolute top-4 right-4 bg-slate-800/90 backdrop-blur-md text-white px-3 py-1.5 rounded-full flex items-center gap-1.5 text-xs font-bold shadow-md z-10">
+                      <Lock className="w-3 h-3 text-amber-300" />
+                      {/* 비회원이면 '회원 전용', 회원이면 'PRO 전용' 노출 */}
+                      <span>{!user ? '회원 전용' : 'PRO 전용'}</span>
+                    </div>
+                  )}
+
+                  <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300">
+                    {mode.icon}
                   </div>
-                )}
-                <div className="w-16 h-16 rounded-2xl bg-white border border-slate-100 shadow-sm flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300">
-                  {mode.icon}
-                </div>
-                <h3 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">{mode.title}</h3>
-                <p className="text-sm text-slate-500 leading-relaxed min-h-[40px]">{mode.description}</p>
-                <div className="mt-6 flex justify-end">
-                  <div className={`p-2 rounded-full transition-colors ${mode.isPro && !isProUser ? 'bg-slate-100 text-slate-400 group-hover:bg-violet-100 group-hover:text-violet-600' : 'bg-white text-slate-400 group-hover:bg-violet-600 group-hover:text-white shadow-sm'}`}>
-                    <ChevronRight className="w-5 h-5" />
+                  <h3 className="text-lg font-bold text-slate-900 mb-2 flex items-center gap-2">{mode.title}</h3>
+                  <p className="text-sm text-slate-500 leading-relaxed min-h-[40px]">{mode.description}</p>
+                  <div className="mt-6 flex justify-end">
+                    <div className={`p-2 rounded-full transition-colors ${isLocked ? 'bg-slate-100 text-slate-400 group-hover:bg-violet-100 group-hover:text-violet-600' : 'bg-white text-slate-400 group-hover:bg-violet-600 group-hover:text-white shadow-sm'}`}>
+                      <ChevronRight className="w-5 h-5" />
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
 
-      {/* 2. 단어 퀴즈 화면 (객관식 - 기존 유지) */}
+      {/* 2. 단어 퀴즈 화면 (객관식) */}
       {activeView === 'word-quiz' && (
         <div className="w-full max-w-3xl mx-auto py-8 md:py-12 px-4 flex flex-col items-center animate-in slide-in-from-right-8 duration-300">
           <div className="w-full mb-6 flex items-center gap-4">
@@ -470,7 +491,7 @@ export default function QuizPage() {
         </div>
       )}
 
-      {/* 🚀 3. 심화 빈칸 타이핑 퀴즈 화면 */}
+      {/* 3. 심화 빈칸 타이핑 퀴즈 화면 */}
       {activeView === 'weakness-quiz' && (
         <div className="w-full max-w-3xl mx-auto py-8 md:py-12 px-4 flex flex-col items-center animate-in slide-in-from-right-8 duration-300">
           <div className="w-full mb-6 flex items-center gap-4">
@@ -510,7 +531,6 @@ export default function QuizPage() {
                     "{questions[currentIdx].sentenceMeaning}"
                   </h3>
                   
-                  {/* 👇 여기가 똑똑한 문맥 맞춤형 힌트 로직입니다! */}
                   {(() => {
                     const meanings = questions[currentIdx].meaning.split(',').map((m: string) => m.trim());
                     const sentenceKo = questions[currentIdx].sentenceMeaning;

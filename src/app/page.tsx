@@ -32,7 +32,7 @@ interface HistoryItem {
   koreanTranslation?: string;
   nuance: string;
   date: string;
-  isMemorized?: boolean; // 👇 암기 완료 여부 속성 추가
+  isMemorized?: boolean;
 }
 
 interface Token {
@@ -54,10 +54,11 @@ interface VocabItem {
   meaning: string;
   pos: string;
   date: string;
-  isMemorized?: boolean; // 👇 암기 완료 여부 속성 추가
+  isMemorized?: boolean;
 }
 
 const MAX_FREE_COUNT = 5;
+const MAX_GUEST_COUNT = 2; 
 const MAX_CHAR_LIMIT = 300;
 
 export default function Home() {
@@ -92,10 +93,37 @@ export default function Home() {
   const recognitionRef = useRef<any>(null);
 
   const [user, setUser] = useState<any>(null);
-
   const [timeUntilMidnight, setTimeUntilMidnight] = useState("");
-
   const [isProUser, setIsProUser] = useState(false);
+
+  const [showProModal, setShowProModal] = useState(false);
+  const [isVocabEditMode, setIsVocabEditMode] = useState(false); 
+  const [selectedVocabIds, setSelectedVocabIds] = useState<string[]>([]); 
+  const [showVocabDeleteModal, setShowVocabDeleteModal] = useState(false);
+
+  // 🎯 매일 첫 학습 완료 시 칭찬 토스트를 띄우는 함수 (검증 완료)
+  const checkDailyLearning = () => {
+    const today = new Date();
+    const todayStr = `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`;
+    
+    const lastCelebrated = localStorage.getItem('last_celebrated_date');
+
+    if (lastCelebrated !== todayStr) {
+      toast.success(`${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일자 학습이 완료되었습니다! 🔥\n오늘의 첫 학습을 기록했어요.`, { 
+        duration: 5000, 
+        icon: '🎉' 
+      });
+      localStorage.setItem('last_celebrated_date', todayStr);
+    }
+  };
+
+  const requireLogin = (actionName: string) => {
+    if (!user) {
+      toast.error(`'${actionName}' 기능은 로그인 후 이용할 수 있습니다.\n3초 만에 가입하고 모든 기능을 누려보세요!`, { duration: 4000 });
+      return false;
+    }
+    return true;
+  };
 
   useEffect(() => {
     const checkAdminStatus = async () => {
@@ -103,72 +131,46 @@ export default function Home() {
       if (!user) return;
 
       const ADMIN_EMAILS = ['plimieom0@gmail.com', 'admin@zipil.com'];
-      
       if (ADMIN_EMAILS.includes(user.email || '')) {
         setIsProUser(true);
       }
     };
-    
     checkAdminStatus();
   }, []);
 
-  // 👇 2. PRO 모달 상태 추가
-  const [showProModal, setShowProModal] = useState(false);
-
-  // 👇 1. 단어장 다중 선택/삭제용 상태 추가
-  const [isVocabEditMode, setIsVocabEditMode] = useState(false); // 편집 모드 켜짐/꺼짐
-  const [selectedVocabIds, setSelectedVocabIds] = useState<string[]>([]); // 선택된 단어들의 ID 배열
-
-  // 👇 2. 단어 다중 선택 토글 함수
   const toggleVocabSelection = (id: string) => {
-    setSelectedVocabIds(prev => 
-      prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]
-    );
+    setSelectedVocabIds(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]);
   };
 
-  // 👇 3. 전체 선택 / 해제 함수
   const handleSelectAllVocab = () => {
-    if (selectedVocabIds.length === vocab.length) {
-      setSelectedVocabIds([]); // 이미 다 선택되어 있으면 전부 해제
-    } else {
-      setSelectedVocabIds(vocab.map(v => v.id)); // 아니면 전체 선택
-    }
+    if (selectedVocabIds.length === vocab.length) setSelectedVocabIds([]);
+    else setSelectedVocabIds(vocab.map(v => v.id));
   };
 
-  // 👇 1. 커스텀 삭제 모달창 띄우기 상태 추가
-  const [showVocabDeleteModal, setShowVocabDeleteModal] = useState(false);
-
-  // 👇 2. 하단 '삭제' 버튼을 눌렀을 때 (기존 코드 덮어쓰기)
   const handleDeleteSelectedVocab = () => {
     if (selectedVocabIds.length === 0) return;
-    // 브라우저 기본 confirm 대신, 우리가 만든 예쁜 모달을 켭니다.
     setShowVocabDeleteModal(true); 
   };
 
-  // 👇 3. 모달창 안에서 '확인(삭제)'을 눌렀을 때 진짜 DB에서 지우는 함수 (새로 추가)
   const executeDeleteVocab = async () => {
     try {
       const { error } = await supabase.from("vocab").delete().in("id", selectedVocabIds);
       if (error) throw error;
-
       setVocab(vocab.filter(item => !selectedVocabIds.includes(item.id)));
       setSelectedVocabIds([]); 
       setIsVocabEditMode(false); 
-      setShowVocabDeleteModal(false); // 삭제 완료 후 모달 닫기
+      setShowVocabDeleteModal(false); 
       toast.success("선택한 단어가 삭제되었습니다.");
     } catch (err) {
-      console.error(err);
       toast.error("단어 삭제 중 오류가 발생했습니다.");
     }
   };
   
   useEffect(() => {
-    // 1. 첫 렌더링 시 현재 로그인된 세션 확인
     const getUserSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       
       if (session) {
-        // 👇 [검문소 2] 홈 화면 진입 시 탈퇴 여부 2차 확인 (구글 로그인 유저 타겟)
         const { data: profile } = await supabase
           .from('profiles')
           .select('is_deleted')
@@ -178,30 +180,25 @@ export default function Home() {
         if (profile?.is_deleted) {
           const isRecover = confirm("탈퇴 대기 중인 계정입니다.\n\n탈퇴를 취소하고 복구하시겠습니까?");
           if (isRecover) {
-            // 복구 처리
             await supabase.from('profiles').update({ is_deleted: false, deleted_at: null }).eq('id', session.user.id);
             alert("계정이 성공적으로 복구되었습니다! 🎉");
-            setUser(session.user); // 복구 후에 화면 렌더링 허가
+            setUser(session.user); 
           } else {
-            // 거절 시 튕겨내기
             await supabase.auth.signOut();
             router.push('/login');
           }
         } else {
-          // 탈퇴 안 한 정상 유저는 그대로 통과
           setUser(session.user);
         }
       } else {
-        router.push('/login');
+        setUser(null);
       }
     };
     getUserSession();
 
-    // 2. 로그인/로그아웃 상태 변화 실시간 감지
     const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
       if (event === 'SIGNED_OUT' || !session) {
         setUser(null);
-        router.push('/login');
       }
     });
 
@@ -210,9 +207,7 @@ export default function Home() {
     };
   }, [router]);
 
-  // 👇 기존 코드에서 freeCount를 remainingCount로 바꿔서 덮어쓰기!
   useEffect(() => {
-    // 횟수가 남아있으면 타이머를 돌릴 필요 없음
     if (remainingCount > 0) return; 
 
     const calculateTimeLeft = () => {
@@ -227,39 +222,37 @@ export default function Home() {
       setTimeUntilMidnight(`${h}시간 ${m}분 ${s}초`);
     };
 
-    calculateTimeLeft(); // 즉시 1번 실행
-    const timer = setInterval(calculateTimeLeft, 1000); // 1초마다 갱신
+    calculateTimeLeft(); 
+    const timer = setInterval(calculateTimeLeft, 1000); 
 
     return () => clearInterval(timer);
   }, [remainingCount]);
   
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    window.location.href = '/login'; //
+    window.location.href = '/login'; 
   };
-  // YYYY-MM-DD HH:MM:SS 포맷으로 깎아주는 함수
+
   const formatDateTime = (dateVal: string | Date) => {
     const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return String(dateVal); // 혹시 모를 에러 방어
+    if (isNaN(d.getTime())) return String(dateVal); 
 
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
   };
 
-  // 👇 AI가 뱉은 영어 품사를 한국어로 강제 변환하는 안전장치 함수
   const translatePOS = (pos: string) => {
     const p = pos.toLowerCase();
     if (p.includes('verb')) return '동사';
     if (p.includes('noun')) return '명사';
-    if (p.includes('adj')) return '형용사'; // adjective 포함
-    if (p.includes('adv')) return '부사';   // adverb 포함
-    if (p.includes('prep')) return '전치사'; // preposition 포함
-    if (p.includes('conj')) return '접속사'; // conjunction 포함
-    if (p.includes('pron')) return '대명사'; // pronoun 포함
-    return pos; // 매칭 안 되면 원래 값 그대로
+    if (p.includes('adj')) return '형용사'; 
+    if (p.includes('adv')) return '부사';  
+    if (p.includes('prep')) return '전치사'; 
+    if (p.includes('conj')) return '접속사'; 
+    if (p.includes('pron')) return '대명사'; 
+    return pos; 
   };
 
-  // 👇 추가 1: 개별 음성 듣기 (미니 TTS)
   const playText = (text: string, e: React.MouseEvent) => {
     e.stopPropagation();
     if (!("speechSynthesis" in window)) {
@@ -273,66 +266,57 @@ export default function Home() {
     window.speechSynthesis.speak(utterance);
   };
 
-  // 👇 추가 2: 기록장 암기 완료 토글
   const toggleVocabMemorized = async (id: string, currentStatus: boolean) => {
-    // 1. DB 먼저 업데이트
-    const { error } = await supabase
-      .from("vocab")
-      .update({ is_memorized: !currentStatus })
-      .eq("id", id);
-
-    // 2. 에러가 없으면 화면(State)도 업데이트
+    const { error } = await supabase.from("vocab").update({ is_memorized: !currentStatus }).eq("id", id);
     if (!error) {
       setVocab(vocab.map(item => item.id === id ? { ...item, isMemorized: !currentStatus } : item));
     }
   };
 
-  // 👇 기록장 암기 토글 함수 교체
   const toggleHistoryMemorized = async (id: string, currentStatus: boolean) => {
-    const { error } = await supabase
-      .from("history")
-      .update({ is_memorized: !currentStatus })
-      .eq("id", id);
-
+    const { error } = await supabase.from("history").update({ is_memorized: !currentStatus }).eq("id", id);
     if (!error) {
       setHistory(history.map(item => item.id === id ? { ...item, isMemorized: !currentStatus } : item));
     }
   };
 
-  // 1. 일일 무료 사용량 로컬스토리지 초기화
   useEffect(() => {
-    fetchVocab();
-    fetchHistory();
-    // (주의: 남은 무료 횟수(remainingCount)를 불러오는 로컬스토리지 로직이 있다면 그건 그대로 남겨두세요!)
+    if (user === undefined) return; 
 
-    // 👇 저장된 날짜와 횟수 꺼내오기 로직 추가
-    const savedDate = localStorage.getItem("zipil_date");
     const today = new Date().toLocaleDateString();
 
-    if (savedDate === today) {
-      // 접속한 날짜가 오늘과 같다면, 저장된 횟수를 그대로 불러옴
-      const savedCount = localStorage.getItem("zipil_remaining_count");
-      if (savedCount !== null) {
-        setRemainingCount(parseInt(savedCount, 10));
+    if (user) {
+      fetchVocab();
+      fetchHistory();
+      const savedDate = localStorage.getItem("zipil_date");
+      if (savedDate === today) {
+        const savedCount = localStorage.getItem("zipil_remaining_count");
+        if (savedCount !== null) setRemainingCount(parseInt(savedCount, 10));
+      } else {
+        setRemainingCount(MAX_FREE_COUNT);
+        localStorage.setItem("zipil_remaining_count", MAX_FREE_COUNT.toString());
+        localStorage.setItem("zipil_date", today);
       }
     } else {
-      // 처음 접속했거나 날짜가 바뀌었다면(자정 지남), 5회로 가득 채우고 오늘 날짜 갱신
-      setRemainingCount(MAX_FREE_COUNT);
-      localStorage.setItem("zipil_remaining_count", MAX_FREE_COUNT.toString());
-      localStorage.setItem("zipil_date", today);
+      setVocab([]);
+      setHistory([]);
+      const savedDate = localStorage.getItem("zipil_guest_date");
+      if (savedDate === today) {
+        const savedCount = localStorage.getItem("zipil_guest_count");
+        if (savedCount !== null) setRemainingCount(parseInt(savedCount, 10));
+      } else {
+        setRemainingCount(MAX_GUEST_COUNT);
+        localStorage.setItem("zipil_guest_count", MAX_GUEST_COUNT.toString());
+        localStorage.setItem("zipil_guest_date", today);
+      }
     }
-  }, []);
+  }, [user]);
   
-  // 단어장 DB에서 가져오기
   const fetchVocab = async () => {
     const { data, error } = await supabase.from("vocab").select("*").order("created_at", { ascending: false });
     if (data) {
       const formatted = data.map((item: any) => ({
-        id: item.id,
-        word: item.word,
-        meaning: item.meaning,
-        pos: item.pos,
-        // 👇 item.date 대신, DB 고유 시간인 created_at을 포맷팅하여 사용!
+        id: item.id, word: item.word, meaning: item.meaning, pos: item.pos,
         date: item.created_at ? formatDateTime(item.created_at) : formatDateTime(item.date),
         isMemorized: item.is_memorized
       }));
@@ -340,24 +324,18 @@ export default function Home() {
     }
   };
 
-  // 기록장 DB에서 가져오기
   const fetchHistory = async () => {
     const { data, error } = await supabase.from("history").select("*").order("created_at", { ascending: false });
     if (data) {
       const formatted = data.map((item: any) => ({
-        id: item.id,
-        originalText: item.original_text,
-        correctedText: item.corrected_text,
-        koreanTranslation: item.korean_translation,
-        nuance: item.nuance,
-        date: item.date,
+        id: item.id, originalText: item.original_text, correctedText: item.corrected_text,
+        koreanTranslation: item.korean_translation, nuance: item.nuance, date: item.date,
         isMemorized: item.is_memorized
       }));
       setHistory(formatted);
     }
   };
 
-  // 2. Web Speech API (STT) 초기화
   useEffect(() => {
     if (typeof window !== "undefined") {
       const SpeechRecognition =
@@ -389,7 +367,6 @@ export default function Home() {
     }
   }, [result]);
 
-  // 3. 발음 일치도 점수 계산 로직
   const calculateScore = (userSpeech: string) => {
     if (!result) return;
     const targetWords = result.corrected.split(/\s+/);
@@ -416,7 +393,6 @@ export default function Home() {
     setPronunciationDetails(details);
   };
 
-  // 4. TTS: 원어민 발음 듣기
   const handlePlayTTS = () => {
     if (!result || !("speechSynthesis" in window)) {
       alert("브라우저가 음성 재생(TTS)을 지원하지 않습니다.");
@@ -425,17 +401,13 @@ export default function Home() {
     window.speechSynthesis.cancel();
     const utterance = new SpeechSynthesisUtterance(result.corrected);
     utterance.lang = "en-US";
-
     utterance.rate = ttsRate;
-
     utterance.onstart = () => setIsPlayingAudio(true);
     utterance.onend = () => setIsPlayingAudio(false);
     utterance.onerror = () => setIsPlayingAudio(false);
-
     window.speechSynthesis.speak(utterance);
   };
 
-  // 5. STT: 녹음 토글
   const handleToggleRecord = () => {
     if (!recognitionRef.current) {
       alert("현재 브라우저는 음성 인식을 지원하지 않습니다. Chrome 브라우저를 권장합니다.");
@@ -457,7 +429,6 @@ export default function Home() {
     }
   };
 
-  // 6. AI 분석 호출
   const handleAnalyze = async () => {
     const trimmed = inputText.trim();
     setErrorMessage(null);
@@ -466,11 +437,13 @@ export default function Home() {
       setErrorMessage("교정할 문장을 입력해주세요.");
       return;
     }
-    if (trimmed.length > MAX_CHAR_LIMIT) {
+    if (trimmed.length > MAX_CHAR_LIMIT && !isProUser) {
       setErrorMessage(`최대 ${MAX_CHAR_LIMIT}자 이하로 입력해주세요.`);
       return;
     }
-    if (remainingCount <= 0) {
+    
+    if (!isProUser && remainingCount <= 0) {
+      if (!user) return requireLogin('추가 AI 분석'); 
       setShowLimitModal(true);
       return;
     }
@@ -495,11 +468,20 @@ export default function Home() {
 
       const data = await res.json();
       setResult(data);
-      saveToHistory(trimmed, data.corrected, data.korean_translation, data.explanation);
+      
+      // ✅ 기록장 자동 저장 및 자정 토스트 호출 완벽 검증
+      if (user) {
+        saveToHistory(trimmed, data.corrected, data.korean_translation, data.explanation);
+        checkDailyLearning(); 
+      }
 
       const newCount = remainingCount - 1;
       setRemainingCount(newCount);
-      localStorage.setItem("zipil_remaining_count", newCount.toString());
+      if (user) {
+        localStorage.setItem("zipil_remaining_count", newCount.toString());
+      } else {
+        localStorage.setItem("zipil_guest_count", newCount.toString());
+      }
 
     } catch (err: any) {
       setErrorMessage(err.message || "문장 분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
@@ -514,12 +496,11 @@ export default function Home() {
 
   useEffect(() => {
     const savedHistory = localStorage.getItem('zipil_history');
-    if (savedHistory) {
+    if (savedHistory && user) {
       setHistory(JSON.parse(savedHistory));
     }
-  }, []);
+  }, [user]);
 
-  // 기록장에 새 분석 결과 저장하기 (DB Insert)
   const saveToHistory = async (original: string, corrected: string, koreanTranslation: string, nuance: string) => {
     const dateStr = formatDateTime(new Date());
 
@@ -533,7 +514,7 @@ export default function Home() {
         date: dateStr,
         is_memorized: false
       }])
-      .select(); // 저장된 데이터를 다시 가져옴 (id 등을 화면에 그리기 위해)
+      .select(); 
 
     if (data && !error) {
       const newItem: HistoryItem = {
@@ -545,14 +526,12 @@ export default function Home() {
         date: data[0].date,
         isMemorized: data[0].is_memorized
       };
-      setHistory([newItem, ...history]); // 화면 업데이트
+      setHistory([newItem, ...history]); 
     }
   };
 
-  // 기록장 전체 비우기 (DB Delete)
   const clearHistory = async () => {
     if (confirm('모든 학습 기록을 삭제하시겠습니까?')) {
-      // Supabase에서 전체 삭제를 위해 조건(id가 null이 아닌 것)을 줍니다.
       const { error } = await supabase.from("history").delete().not("id", "is", null);
       if (!error) {
         setHistory([]);
@@ -562,15 +541,16 @@ export default function Home() {
 
   useEffect(() => {
     const savedVocab = localStorage.getItem('zipil_vocab');
-    if (savedVocab) {
+    if (savedVocab && user) {
       setVocab(JSON.parse(savedVocab));
     }
-  }, []);
+  }, [user]);
 
-  // 단어장에 새 단어 추가하기
   const addToVocab = async (word: string, meaning: string, pos: string) => {
+    if (!requireLogin('단어 저장')) return;
+
     if (vocab.some(v => v.word.toLowerCase() === word.toLowerCase())) {
-      toast.error("이미 단어장에 저장된 단어입니다."); // ✅ 이렇게 수정!
+      toast.error("이미 단어장에 저장된 단어입니다."); 
       return;
     }
 
@@ -584,13 +564,11 @@ export default function Home() {
           word: word,
           meaning: meaning,
           pos: koreanPos,
-          //pos: pos,
           date: dateStr,
           is_memorized: false
         }])
         .select();
 
-      // 👇 에러가 발생하면 화면에 팝업을 띄우도록 추가
       if (error) {
         console.error("단어 추가 에러:", error);
         alert(`DB 에러: ${error.message}`);
@@ -608,6 +586,8 @@ export default function Home() {
         };
         setVocab([newItem, ...vocab]);
         toast.success(`'${word}' 단어가 저장되었습니다!`);
+        // ✅ 단어장 추가 시 자정 토스트 호출 완벽 검증
+        checkDailyLearning();
       }
     } catch (err) {
       console.error("통신 에러:", err);
@@ -615,7 +595,6 @@ export default function Home() {
     }
   };
 
-  // 단어장에서 단어 삭제하기 (DB Delete)
   const removeVocab = async (id: string) => {
     const { error } = await supabase.from("vocab").delete().eq("id", id);
     if (!error) {
@@ -631,7 +610,6 @@ export default function Home() {
       <header className="w-full max-w-5xl flex items-center justify-between py-3 mb-6 md:mb-8">
         <div className="flex items-center gap-3">
           
-          {/* 인디케이터 로고 */}
           <div className="flex items-center justify-center bg-white border border-slate-200 shadow-sm rounded-full px-3.5 py-1.5 shrink-0 cursor-default">
             <span className="font-black text-slate-800 text-sm tracking-[0.2em] flex items-center gap-2 whitespace-nowrap pl-0.5">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
@@ -647,28 +625,27 @@ export default function Home() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowVocab(true)}
+            onClick={() => { if(requireLogin('단어장')) setShowVocab(true); }}
             className="text-xs font-semibold px-2.5 py-1 md:px-3 md:py-1.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 transition-colors flex items-center gap-1 cursor-pointer"
           >
             <span>단어장</span>
-            {vocab.length > 0 && (
+            {user && vocab.length > 0 && (
               <span className="bg-emerald-600 text-white text-[10px] px-1.5 rounded-full">
                 {vocab.length}
               </span>
             )}
           </button>
           <button
-            onClick={() => setShowHistory(true)}
+            onClick={() => { if(requireLogin('학습 기록장')) setShowHistory(true); }}
             className="text-xs font-semibold px-2.5 py-1 md:px-3 md:py-1.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 transition-colors flex items-center gap-1 cursor-pointer">
             <span>기록장</span>
-            {history.length > 0 && (
+            {user && history.length > 0 && (
               <span className="bg-slate-800 text-white text-[10px] px-1.5 rounded-full">
                 {history.length}
               </span>
             )}
           </button>
           
-          {/* 👇 👑 1. PRO 유저면 클릭 가능한 PRO 뱃지 표시, 아니면 남은 횟수 표시 */}
           {isProUser ? (
             <button
               onClick={() => setShowProModal(true)}
@@ -683,12 +660,11 @@ export default function Home() {
               ? "bg-violet-100 text-violet-700 border-violet-200"
               : "bg-rose-100 text-rose-700 border-rose-200 animate-pulse"
               }`}>
-              오늘 무료 {remainingCount}/{MAX_FREE_COUNT}
+              {user ? `오늘 무료 ${remainingCount}/${MAX_FREE_COUNT}` : `비회원 체험 ${remainingCount}/${MAX_GUEST_COUNT}`}
             </span>
           )}
 
-          {/* 일반 유저용 PRO 업그레이드 버튼 */}
-          {!isProUser && (
+          {user && !isProUser && (
             <button
               onClick={() => setShowProModal(true)}
               className="hidden md:flex items-center gap-1 text-xs font-bold px-3 py-1.5 rounded-full bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white shadow-md hover:shadow-lg transition-all hover:scale-105 cursor-pointer"
@@ -717,19 +693,20 @@ export default function Home() {
               </div>
             </Link>
           ) : (
-            <button
-              onClick={() => window.location.href = '/login'}
+            <Link
+              href="/login"
               className="px-3 py-1.5 md:px-4 md:py-1.5 bg-slate-900 text-white text-xs font-bold rounded-full hover:bg-slate-800 transition-colors shadow-sm shrink-0 cursor-pointer"
             >
               로그인
-            </button>
+            </Link>
           )}
         </div>
       </header>
 
       <div className="w-full max-w-5xl grid grid-cols-1 md:grid-cols-2 gap-5 md:gap-8">
 
-        <section className="bg-white p-5 md:p-8 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between min-h-[380px] md:min-h-[600px]">
+        {/* 👇 통계, 퀴즈 페이지와 완벽하게 일치하는 둥근 모서리(rounded-3xl)와 부드러운 그림자(shadow-sm) 적용 */}
+        <section className="bg-white p-5 md:p-8 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col justify-between min-h-[380px] md:min-h-[600px]">
           <div>
             <div className="flex items-center justify-between mb-3.5">
               <label className="text-sm font-bold text-slate-700 flex items-center gap-1.5">
@@ -749,18 +726,17 @@ export default function Home() {
                   </button>
                 )}
                 
-                {/* 👇 👑 2. PRO 유저는 3000자, 일반은 300자로 렌더링 */}
                 <span className={`text-xs ${inputText.length > (isProUser ? 3000 : 300) ? "text-rose-500 font-bold" : "text-slate-400"}`}>
                   {inputText.length}/{isProUser ? 3000 : 300}자
                 </span>
               </div>
             </div>
 
-            {/* 👇 👑 3. 텍스트 영역 테두리 경고도 3000자기준으로 변경 */}
+            {/* 👇 입력창 포커스 시 테두리를 시그니처 컬러인 보라색(Violet)으로 통일 */}
             <textarea
-              className={`w-full h-48 md:h-80 p-3.5 md:p-5 rounded-xl border focus:outline-hidden focus:ring-2 resize-none text-slate-800 text-sm leading-relaxed placeholder:text-slate-400 bg-slate-50/50 transition-all ${inputText.length > (isProUser ? 3000 : 300)
+              className={`w-full h-48 md:h-80 p-3.5 md:p-5 rounded-2xl border focus:outline-hidden focus:ring-2 resize-none text-slate-800 text-sm leading-relaxed placeholder:text-slate-400 bg-slate-50/50 transition-all ${inputText.length > (isProUser ? 3000 : 300)
                 ? "border-rose-300 focus:ring-rose-200"
-                : "border-slate-200 focus:ring-amber-300 focus:border-transparent"
+                : "border-slate-200 focus:ring-violet-200 focus:border-violet-400"
                 }`}
               placeholder="영어로 표현하고 싶은 문장이나 교정받고 싶은 영어를 입력하세요..."
               value={inputText}
@@ -776,42 +752,45 @@ export default function Home() {
           </div>
 
           <div className="flex flex-col gap-2 mt-4">
-            {/* 👇 👑 4. PRO 유저면 횟수가 0이어도 버튼이 안 잠기도록 조건 우회 */}
             <button
               onClick={handleAnalyze}
               disabled={loading || !inputText.trim() || inputText.length > (isProUser ? 3000 : 300) || (!isProUser && remainingCount === 0)}
-              className={`w-full py-3.5 px-4 rounded-xl font-semibold text-sm flex items-center justify-center gap-2 transition-colors shadow-xs active:scale-[0.99] ${
+              className={`w-full py-3.5 px-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-sm active:scale-[0.99] ${
                 !isProUser && remainingCount === 0
                   ? "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
-                  : "bg-slate-900 hover:bg-slate-800 disabled:bg-slate-300 text-white cursor-pointer disabled:cursor-not-allowed"
+                  // 👇 분석 버튼을 한층 더 고급스러운 보라색(Violet) 스타일로 업그레이드
+                  : "bg-violet-600 hover:bg-violet-700 disabled:bg-slate-300 text-white cursor-pointer disabled:cursor-not-allowed shadow-md shadow-violet-200"
               }`}
             >
               {!isProUser && remainingCount === 0 ? (
-                `⏳ 자정 충전까지 ${timeUntilMidnight}`
+                user ? `⏳ 자정 충전까지 ${timeUntilMidnight}` : "🔒 로그인하고 계속하기"
               ) : loading ? (
                 <>
-                  <Loader2 className="w-4 h-4 animate-spin text-amber-300" />
+                  <Loader2 className="w-4 h-4 animate-spin text-violet-200" />
                   AI 분석 및 교정 중...
                 </>
               ) : (
                 <>
-                  <Sparkles className="w-4 h-4 text-amber-300" />
+                  <Sparkles className="w-4 h-4 text-violet-100" />
                   AI 문장 교정 & 분석하기
                 </>
               )}
             </button>
 
-            {/* 👇 👑 5. PRO 유저면 안내문구 숨김 */}
             {!isProUser && remainingCount === 0 && (
               <p className="text-center text-xs text-slate-500 font-medium animate-pulse mt-1">
-                오늘 무료 분석을 모두 사용했습니다. 상단의 <span className="font-bold text-violet-600">내 학습 기록장</span>에서 복습해 보세요!
+                {user ? (
+                  <>오늘 무료 분석을 모두 사용했습니다. 상단의 <span className="font-bold text-violet-600">내 학습 기록장</span>에서 복습해 보세요!</>
+                ) : (
+                  <>비회원 체험이 끝났습니다. <Link href="/login" className="font-bold text-violet-600 hover:underline">가입하고 매일 무료</Link>로 즐겨보세요!</>
+                )}
               </p>
             )}
           </div>
         </section>
 
-        {/* --- 우측: 분석 및 발음 트레이닝 카드 (이하 수정 없음 그대로 유지) --- */}
-        <section className="bg-white p-5 md:p-6 rounded-2xl border border-slate-200/80 shadow-xs flex flex-col justify-between min-h-[380px] md:min-h-[480px]">
+        {/* 👇 결과 컨테이너 역시 rounded-3xl, shadow-sm 통일 */}
+        <section className="bg-white p-5 md:p-6 rounded-3xl border border-slate-200/80 shadow-sm flex flex-col justify-between min-h-[380px] md:min-h-[480px]">
           <div className="space-y-3.5">
             <div className="flex items-center justify-end border-b border-slate-100 pb-3 min-h-[44px]">
               <div className="flex items-center gap-1.5 md:gap-2">
@@ -862,7 +841,7 @@ export default function Home() {
 
             {result ? (
               <>
-                <div className="p-3.5 md:p-4 bg-violet-50/40 rounded-xl border border-violet-100/60 space-y-2.5">
+                <div className="p-3.5 md:p-4 bg-violet-50/40 rounded-2xl border border-violet-100/60 space-y-2.5">
                   <p className="text-xs font-medium text-violet-700/90 pb-3 mb-3 border-b border-violet-200/50 flex items-center gap-1.5">
                     <span className="text-[10px] bg-violet-200/70 text-violet-800 px-1.5 py-0.5 rounded font-bold">완역</span>
                     {result.korean_translation}
@@ -878,14 +857,21 @@ export default function Home() {
                             className="relative group inline-block"
                             onClick={(e) => { e.stopPropagation(); handleTokenClick(idx); }}
                           >
-                            <span className={`cursor-pointer px-2 py-1 rounded-lg border text-sm font-semibold transition-all shadow-2xs block ${activeTokenIdx === idx
-                              ? "bg-violet-600 text-white border-violet-600"
-                              : "bg-white group-hover:bg-violet-600 group-hover:text-white text-slate-800 border-slate-200"
+                            {/* 👇 1. 클릭된 상태일 때는 다른 단어의 Hover 색상 변화 차단 */}
+                            <span className={`cursor-pointer px-2 py-1 rounded-lg border text-sm font-semibold transition-all shadow-sm block ${
+                              activeTokenIdx !== null
+                                ? (activeTokenIdx === idx ? "bg-violet-600 text-white border-violet-600" : "bg-white text-slate-800 border-slate-200")
+                                : "bg-white group-hover:bg-violet-600 group-hover:text-white text-slate-800 border-slate-200"
                               }`}>
                               {token.word}
                             </span>
-                            <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-30 ${activeTokenIdx === idx ? "flex" : "hidden group-hover:flex"
-                              } flex-col items-center`}>
+                            
+                            {/* 👇 2. 클릭된 상태일 때는 다른 단어의 Hover 툴팁 팝업 차단 */}
+                            <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-30 flex-col items-center ${
+                              activeTokenIdx !== null 
+                                ? (activeTokenIdx === idx ? "flex" : "hidden") 
+                                : "hidden group-hover:flex"
+                              }`}>
                               <div className="bg-slate-900 text-white text-xs rounded-lg py-1.5 px-2.5 shadow-xl whitespace-nowrap flex items-center gap-1.5 border border-slate-700">
                                 <span className="bg-violet-500 text-white text-[10px] font-bold px-1.5 py-0.5 rounded">
                                   {translatePOS(token.pos)}
@@ -917,9 +903,12 @@ export default function Home() {
                   )}
                 </div>
 
-                <div className="text-xs text-slate-600 bg-slate-50 p-3 rounded-xl border border-slate-100 leading-relaxed">
-                  <span className="font-semibold text-slate-700 block mb-0.5">💡 교정 뉘앙스</span>
-                  {result.explanation}
+                {/* 👇 뉘앙스 박스 디자인 개선 (보라색 계열로 고급스럽게) */}
+                <div className="text-xs text-violet-800 bg-violet-50/50 p-4 rounded-2xl border border-violet-100 leading-relaxed shadow-sm">
+                  <span className="font-bold text-violet-900 flex items-center gap-1.5 mb-1.5">
+                    💡 교정 뉘앙스
+                  </span>
+                  <span className="text-slate-600 font-medium">{result.explanation}</span>
                 </div>
 
                 {spokenText && (
@@ -962,9 +951,9 @@ export default function Home() {
                 )}
               </>
             ) : (
-              <div className="h-44 md:h-56 flex flex-col items-center justify-center text-slate-400 text-xs gap-1">
-                <span>좌측에 문장을 입력하고 분석 버튼을 누르면</span>
-                <span>교정된 문장과 발음 트레이닝 기능이 활성화됩니다.</span>
+              <div className="h-44 md:h-56 flex flex-col items-center justify-center text-slate-400 text-xs gap-1.5">
+                <span className="font-medium">좌측에 문장을 입력하고 분석 버튼을 누르면</span>
+                <span className="font-medium">교정된 문장과 발음 트레이닝 기능이 활성화됩니다.</span>
               </div>
             )}
           </div>
@@ -1311,7 +1300,7 @@ export default function Home() {
           </div>
         )}
       </div>
-      {/* 👑 PRO 플랜 업그레이드 / 혜택 안내 모달 */}
+
       {showProModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl relative animate-in zoom-in-95 duration-200 overflow-hidden">
@@ -1332,7 +1321,6 @@ export default function Home() {
               <h3 className="text-2xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-violet-600 to-fuchsia-600 mb-1.5">
                 Zipil PRO
               </h3>
-              {/* 👇 PRO 유저 여부에 따라 안내 문구 변경 */}
               <p className="text-xs text-slate-500 font-medium">
                 {isProUser ? "회원님은 현재 아래의 모든 혜택을 누리고 있습니다!" : "더 강력한 AI 기능으로 영작 마스터가 되세요"}
               </p>
@@ -1353,7 +1341,6 @@ export default function Home() {
             </div>
 
             <div className="text-center mb-4">
-              {/* 👇 PRO 유저라면 가격과 결제 버튼 대신 '확인' 버튼만 노출 */}
               {isProUser ? (
                 <button
                   onClick={() => setShowProModal(false)}
@@ -1386,7 +1373,7 @@ export default function Home() {
           </div>
         </div>
       )}
-      {/* 🚨 단어 다중 삭제 확인 모달 */}
+
       {showVocabDeleteModal && (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center p-4 z-[100]">
           <div className="bg-white rounded-2xl max-w-sm w-full p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">

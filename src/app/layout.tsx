@@ -36,19 +36,22 @@ export default function RootLayout({
 
         {/* 👇 2. 최상위 레이아웃에 Toaster 추가 (모든 페이지에서 알림이 뜨게 함) */}
         <Toaster 
-          position="top-center" // 알림이 뜰 위치 (우상단을 원하시면 'top-right'로 변경)
+          position="top-center"
           toastOptions={{
-            duration: 2500, // 2.5초 뒤에 스르륵 사라짐
+            duration: 2500,
             style: {
-              background: '#334155', // 세련된 짙은 남색 배경
-              color: '#fff', // 흰색 글씨
+              background: '#334155',
+              color: '#fff',
               fontSize: '14px',
               fontWeight: '500',
-              borderRadius: '12px', // 둥근 모서리
+              borderRadius: '12px',
+              // 👇 이 두 줄이 핵심입니다! 넓이를 늘려주고, 한국어 단어가 중간에 끊기지 않게 방어합니다.
+              maxWidth: '500px', 
+              wordBreak: 'keep-all',
             },
             success: {
               iconTheme: {
-                primary: '#10b981', // 성공 아이콘 색상 (에메랄드)
+                primary: '#10b981',
                 secondary: '#fff',
               },
             },

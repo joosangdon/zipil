@@ -3,16 +3,48 @@
 import React, { useState, useEffect } from 'react';
 import { Home, Gamepad2, BarChart2, ChevronLeft, User } from 'lucide-react';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation'; // 현재 주소를 알아내는 훅
+import { usePathname } from 'next/navigation'; // useRouter 제거 (안 쓰임)
+import { supabase } from '@/lib/supabase';
+import toast from 'react-hot-toast';
 
 export default function Sidebar() {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(true);
-  const pathname = usePathname(); // 현재 URL 경로를 가져옵니다 (예: '/' 또는 '/quiz')
+  const pathname = usePathname();
+  
+  // 👇 1. 초기값을 undefined로 두어, 정보를 가져오기 전 찰나의 순간에 오작동하는 것을 방지
+  const [user, setUser] = useState<any>(undefined);
 
-  // 탭(주소)을 이동할 때마다 무조건 사이드바를 닫아주는 안전장치 추가!
+  useEffect(() => {
+    const checkUser = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      setUser(session?.user || null);
+    };
+    checkUser();
+
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      setUser(session?.user || null);
+    });
+
+    return () => {
+      authListener.subscription.unsubscribe();
+    };
+  }, []);
+
+  // 탭을 이동할 때마다 사이드바 닫기
   useEffect(() => {
     setIsSidebarCollapsed(true);
   }, [pathname]);
+
+  // 👇 2. 비회원이 보호된 메뉴를 눌렀을 때 가로채는 가드 함수
+  const handleRestrictedClick = (e: React.MouseEvent, menuName: string) => {
+    // 확실하게 '비회원(null)'인 상태로 판별되었을 때만 페이지 이동을 막음
+    if (user === null) {
+      e.preventDefault(); 
+      toast.error(`'${menuName}' 기능은 로그인 후 이용할 수 있습니다.\n3초 만에 가입하고 모든 기능을 누려보세요!`, {
+        duration: 4000,
+      });
+    }
+  };
 
   if (pathname === '/login' || pathname === '/signup') return null;
 
@@ -40,7 +72,7 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 py-6 flex flex-col gap-2 px-3">
-        {/* 버튼(button) 대신 링크(Link) 사용. 현재 경로(pathname)에 따라 색상이 바뀝니다. */}
+        {/* 홈은 누구나 접근 가능 */}
         <Link 
           href="/" 
           className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
@@ -53,8 +85,10 @@ export default function Sidebar() {
           {!isSidebarCollapsed && <span className="text-sm whitespace-nowrap">홈 (교정)</span>}
         </Link>
 
+        {/* 퀴즈 페이지 (로그인 필수) */}
         <Link 
           href="/quiz" 
+          onClick={(e) => handleRestrictedClick(e, '단어 퀴즈')}
           className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
             pathname === '/quiz' 
               ? "bg-slate-800/80 text-amber-400 font-semibold" 
@@ -65,9 +99,11 @@ export default function Sidebar() {
           {!isSidebarCollapsed && <span className="text-sm whitespace-nowrap">단어 퀴즈</span>}
         </Link>
 
-        {/* 통계 페이지*/}
+        {/* 학습 통계 페이지 (로그인 필수) */}
         <Link 
-          href="/stats" className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
+          href="/stats" 
+          onClick={(e) => handleRestrictedClick(e, '학습 통계')}
+          className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
             pathname === '/stats' 
               ? "bg-slate-800/80 text-amber-400 font-semibold" 
               : "hover:bg-slate-800/50 hover:text-white text-slate-400 font-medium"
@@ -76,10 +112,12 @@ export default function Sidebar() {
           <BarChart2 className="w-5 h-5 shrink-0" />
           {!isSidebarCollapsed && <span className="text-sm whitespace-nowrap">학습 통계</span>}
         </Link>
-        {/* 마이페이지 */}
-        
+
+        {/* 마이페이지 (로그인 필수) */}
         <Link 
-          href="/mypage" className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
+          href="/mypage" 
+          onClick={(e) => handleRestrictedClick(e, '마이페이지')}
+          className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
             pathname === '/mypage' 
               ? "bg-slate-800/80 text-amber-400 font-semibold" 
               : "hover:bg-slate-800/50 hover:text-white text-slate-400 font-medium"
