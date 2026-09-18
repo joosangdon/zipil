@@ -66,15 +66,23 @@ export default function StatsPage() {
       }
       setUser(session.user);
 
-      const [historyRes, vocabRes] = await Promise.all([
+      // 👇 attendance 테이블도 함께 불러오도록 추가!
+      const [historyRes, vocabRes, attendanceRes] = await Promise.all([
         supabase.from('history').select('created_at, date'),
-        supabase.from('vocab').select('word, meaning, is_memorized, created_at, date, pos')
+        supabase.from('vocab').select('word, meaning, is_memorized, created_at, date, pos'),
+        supabase.from('attendance').select('study_date') 
       ]);
 
       const historyData = historyRes.data || [];
       const vocabData = vocabRes.data || [];
+      const attendanceData = attendanceRes.data || [];
 
-      const allDates = [...historyData, ...vocabData].map(item => getFormattedDate(item.created_at || item.date));
+      // 👇 3개 테이블의 날짜 데이터를 모두 하나로 합치기
+      const allDates = [
+        ...historyData.map(item => getFormattedDate(item.created_at || item.date)),
+        ...vocabData.map(item => getFormattedDate(item.created_at || item.date)),
+        ...attendanceData.map(item => getFormattedDate(item.study_date))
+      ];
       const activityMap = new Map<string, number>();
       allDates.forEach(date => activityMap.set(date, (activityMap.get(date) || 0) + 1));
 
