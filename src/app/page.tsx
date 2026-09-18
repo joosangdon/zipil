@@ -16,7 +16,7 @@ import {
   X,
   Eye,
   EyeOff,
-  Check, 
+  Check,
   Crown
 } from "lucide-react";
 
@@ -24,6 +24,7 @@ import { supabase } from "@/lib/supabase";
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
+import { loadTossPayments } from '@tosspayments/payment-sdk';
 
 interface HistoryItem {
   id: string;
@@ -58,7 +59,7 @@ interface VocabItem {
 }
 
 const MAX_FREE_COUNT = 5;
-const MAX_GUEST_COUNT = 2; 
+const MAX_GUEST_COUNT = 2;
 const MAX_CHAR_LIMIT = 300;
 
 export default function Home() {
@@ -97,21 +98,21 @@ export default function Home() {
   const [isProUser, setIsProUser] = useState(false);
 
   const [showProModal, setShowProModal] = useState(false);
-  const [isVocabEditMode, setIsVocabEditMode] = useState(false); 
-  const [selectedVocabIds, setSelectedVocabIds] = useState<string[]>([]); 
+  const [isVocabEditMode, setIsVocabEditMode] = useState(false);
+  const [selectedVocabIds, setSelectedVocabIds] = useState<string[]>([]);
   const [showVocabDeleteModal, setShowVocabDeleteModal] = useState(false);
 
   // 🎯 매일 첫 학습 완료 시 칭찬 토스트를 띄우는 함수 (검증 완료)
   const checkDailyLearning = () => {
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${today.getMonth() + 1}-${today.getDate()}`;
-    
+
     const lastCelebrated = localStorage.getItem('last_celebrated_date');
 
     if (lastCelebrated !== todayStr) {
-      toast.success(`${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일자 학습이 완료되었습니다! 🔥\n오늘의 첫 학습을 기록했어요.`, { 
-        duration: 5000, 
-        icon: '🎉' 
+      toast.success(`${today.getFullYear()}년 ${today.getMonth() + 1}월 ${today.getDate()}일자 학습이 완료되었습니다! 🔥\n오늘의 첫 학습을 기록했어요.`, {
+        duration: 5000,
+        icon: '🎉'
       });
       localStorage.setItem('last_celebrated_date', todayStr);
     }
@@ -138,6 +139,34 @@ export default function Home() {
     checkAdminStatus();
   }, []);
 
+  // 💡 정기구독(빌링) 카드 등록 창 띄우기
+  const handleSubscribe = async () => {
+    // user 상태가 없다면 로그인 페이지로 안내하거나 에러 띄우기
+    if (!user) {
+      toast.error("로그인이 필요합니다.");
+      return;
+    }
+
+    try {
+      const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY;
+      if (!clientKey) {
+        toast.error("결제 연동 키가 설정되지 않았습니다.");
+        return;
+      }
+
+      const tossPayments = await loadTossPayments(clientKey);
+
+      await tossPayments.requestBillingAuth('카드', {
+        customerKey: user.id, // Supabase 유저 ID 전달 (보안상 필수)
+        successUrl: `${window.location.origin}/payment/success`,
+        failUrl: `${window.location.origin}/payment/fail`,
+      });
+    } catch (error) {
+      console.error("결제창 호출 에러:", error);
+      toast.error("결제창을 여는 중 문제가 발생했습니다.");
+    }
+  };
+
   const toggleVocabSelection = (id: string) => {
     setSelectedVocabIds(prev => prev.includes(id) ? prev.filter(v => v !== id) : [...prev, id]);
   };
@@ -149,7 +178,7 @@ export default function Home() {
 
   const handleDeleteSelectedVocab = () => {
     if (selectedVocabIds.length === 0) return;
-    setShowVocabDeleteModal(true); 
+    setShowVocabDeleteModal(true);
   };
 
   const executeDeleteVocab = async () => {
@@ -157,19 +186,19 @@ export default function Home() {
       const { error } = await supabase.from("vocab").delete().in("id", selectedVocabIds);
       if (error) throw error;
       setVocab(vocab.filter(item => !selectedVocabIds.includes(item.id)));
-      setSelectedVocabIds([]); 
-      setIsVocabEditMode(false); 
-      setShowVocabDeleteModal(false); 
+      setSelectedVocabIds([]);
+      setIsVocabEditMode(false);
+      setShowVocabDeleteModal(false);
       toast.success("선택한 단어가 삭제되었습니다.");
     } catch (err) {
       toast.error("단어 삭제 중 오류가 발생했습니다.");
     }
   };
-  
+
   useEffect(() => {
     const getUserSession = async () => {
       const { data: { session } } = await supabase.auth.getSession();
-      
+
       if (session) {
         const { data: profile } = await supabase
           .from('profiles')
@@ -182,7 +211,7 @@ export default function Home() {
           if (isRecover) {
             await supabase.from('profiles').update({ is_deleted: false, deleted_at: null }).eq('id', session.user.id);
             alert("계정이 성공적으로 복구되었습니다! 🎉");
-            setUser(session.user); 
+            setUser(session.user);
           } else {
             await supabase.auth.signOut();
             router.push('/login');
@@ -208,7 +237,7 @@ export default function Home() {
   }, [router]);
 
   useEffect(() => {
-    if (remainingCount > 0) return; 
+    if (remainingCount > 0) return;
 
     const calculateTimeLeft = () => {
       const now = new Date();
@@ -222,20 +251,20 @@ export default function Home() {
       setTimeUntilMidnight(`${h}시간 ${m}분 ${s}초`);
     };
 
-    calculateTimeLeft(); 
-    const timer = setInterval(calculateTimeLeft, 1000); 
+    calculateTimeLeft();
+    const timer = setInterval(calculateTimeLeft, 1000);
 
     return () => clearInterval(timer);
   }, [remainingCount]);
-  
+
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    window.location.href = '/login'; 
+    window.location.href = '/login';
   };
 
   const formatDateTime = (dateVal: string | Date) => {
     const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return String(dateVal); 
+    if (isNaN(d.getTime())) return String(dateVal);
 
     const pad = (n: number) => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
@@ -245,12 +274,12 @@ export default function Home() {
     const p = pos.toLowerCase();
     if (p.includes('verb')) return '동사';
     if (p.includes('noun')) return '명사';
-    if (p.includes('adj')) return '형용사'; 
-    if (p.includes('adv')) return '부사';  
-    if (p.includes('prep')) return '전치사'; 
-    if (p.includes('conj')) return '접속사'; 
-    if (p.includes('pron')) return '대명사'; 
-    return pos; 
+    if (p.includes('adj')) return '형용사';
+    if (p.includes('adv')) return '부사';
+    if (p.includes('prep')) return '전치사';
+    if (p.includes('conj')) return '접속사';
+    if (p.includes('pron')) return '대명사';
+    return pos;
   };
 
   const playText = (text: string, e: React.MouseEvent) => {
@@ -281,7 +310,7 @@ export default function Home() {
   };
 
   useEffect(() => {
-    if (user === undefined) return; 
+    if (user === undefined) return;
 
     const today = new Date().toLocaleDateString();
 
@@ -311,7 +340,7 @@ export default function Home() {
       }
     }
   }, [user]);
-  
+
   const fetchVocab = async () => {
     const { data, error } = await supabase.from("vocab").select("*").order("created_at", { ascending: false });
     if (data) {
@@ -441,9 +470,9 @@ export default function Home() {
       setErrorMessage(`최대 ${MAX_CHAR_LIMIT}자 이하로 입력해주세요.`);
       return;
     }
-    
+
     if (!isProUser && remainingCount <= 0) {
-      if (!user) return requireLogin('추가 AI 분석'); 
+      if (!user) return requireLogin('추가 AI 분석');
       setShowLimitModal(true);
       return;
     }
@@ -468,11 +497,11 @@ export default function Home() {
 
       const data = await res.json();
       setResult(data);
-      
+
       // ✅ 기록장 자동 저장 및 자정 토스트 호출 완벽 검증
       if (user) {
         saveToHistory(trimmed, data.corrected, data.korean_translation, data.explanation);
-        checkDailyLearning(); 
+        checkDailyLearning();
       }
 
       const newCount = remainingCount - 1;
@@ -514,7 +543,7 @@ export default function Home() {
         date: dateStr,
         is_memorized: false
       }])
-      .select(); 
+      .select();
 
     if (data && !error) {
       const newItem: HistoryItem = {
@@ -526,7 +555,7 @@ export default function Home() {
         date: data[0].date,
         isMemorized: data[0].is_memorized
       };
-      setHistory([newItem, ...history]); 
+      setHistory([newItem, ...history]);
     }
   };
 
@@ -550,7 +579,7 @@ export default function Home() {
     if (!requireLogin('단어 저장')) return;
 
     if (vocab.some(v => v.word.toLowerCase() === word.toLowerCase())) {
-      toast.error("이미 단어장에 저장된 단어입니다."); 
+      toast.error("이미 단어장에 저장된 단어입니다.");
       return;
     }
 
@@ -609,7 +638,7 @@ export default function Home() {
     >
       <header className="w-full max-w-5xl flex items-center justify-between py-3 mb-6 md:mb-8">
         <div className="flex items-center gap-3">
-          
+
           <div className="flex items-center justify-center bg-white border border-slate-200 shadow-sm rounded-full px-3.5 py-1.5 shrink-0 cursor-default">
             <span className="font-black text-slate-800 text-sm tracking-[0.2em] flex items-center gap-2 whitespace-nowrap pl-0.5">
               <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse"></span>
@@ -625,7 +654,7 @@ export default function Home() {
         </div>
         <div className="flex items-center gap-2">
           <button
-            onClick={() => { if(requireLogin('단어장')) setShowVocab(true); }}
+            onClick={() => { if (requireLogin('단어장')) setShowVocab(true); }}
             className="text-xs font-semibold px-2.5 py-1 md:px-3 md:py-1.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 transition-colors flex items-center gap-1 cursor-pointer"
           >
             <span>단어장</span>
@@ -636,7 +665,7 @@ export default function Home() {
             )}
           </button>
           <button
-            onClick={() => { if(requireLogin('학습 기록장')) setShowHistory(true); }}
+            onClick={() => { if (requireLogin('학습 기록장')) setShowHistory(true); }}
             className="text-xs font-semibold px-2.5 py-1 md:px-3 md:py-1.5 rounded-full border bg-slate-100 text-slate-700 border-slate-200 hover:bg-slate-200 transition-colors flex items-center gap-1 cursor-pointer">
             <span>기록장</span>
             {user && history.length > 0 && (
@@ -645,7 +674,7 @@ export default function Home() {
               </span>
             )}
           </button>
-          
+
           {isProUser ? (
             <button
               onClick={() => setShowProModal(true)}
@@ -713,7 +742,7 @@ export default function Home() {
                 <PenTool className="w-4 h-4 text-amber-600" />
                 작성할 문장 (한글 또는 영문)
               </label>
-              
+
               <div className="flex items-center gap-3">
                 {inputText.length > 0 && (
                   <button
@@ -725,7 +754,7 @@ export default function Home() {
                     지우기
                   </button>
                 )}
-                
+
                 <span className={`text-xs ${inputText.length > (isProUser ? 3000 : 300) ? "text-rose-500 font-bold" : "text-slate-400"}`}>
                   {inputText.length}/{isProUser ? 3000 : 300}자
                 </span>
@@ -755,12 +784,11 @@ export default function Home() {
             <button
               onClick={handleAnalyze}
               disabled={loading || !inputText.trim() || inputText.length > (isProUser ? 3000 : 300) || (!isProUser && remainingCount === 0)}
-              className={`w-full py-3.5 px-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-sm active:scale-[0.99] ${
-                !isProUser && remainingCount === 0
+              className={`w-full py-3.5 px-4 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 transition-all shadow-sm active:scale-[0.99] ${!isProUser && remainingCount === 0
                   ? "bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200"
                   // 👇 분석 버튼을 한층 더 고급스러운 보라색(Violet) 스타일로 업그레이드
                   : "bg-violet-600 hover:bg-violet-700 disabled:bg-slate-300 text-white cursor-pointer disabled:cursor-not-allowed shadow-md shadow-violet-200"
-              }`}
+                }`}
             >
               {!isProUser && remainingCount === 0 ? (
                 user ? `⏳ 자정 충전까지 ${timeUntilMidnight}` : "🔒 로그인하고 계속하기"
@@ -858,18 +886,16 @@ export default function Home() {
                             onClick={(e) => { e.stopPropagation(); handleTokenClick(idx); }}
                           >
                             {/* 👇 1. 클릭된 상태일 때는 다른 단어의 Hover 색상 변화 차단 */}
-                            <span className={`cursor-pointer px-2 py-1 rounded-lg border text-sm font-semibold transition-all shadow-sm block ${
-                              activeTokenIdx !== null
+                            <span className={`cursor-pointer px-2 py-1 rounded-lg border text-sm font-semibold transition-all shadow-sm block ${activeTokenIdx !== null
                                 ? (activeTokenIdx === idx ? "bg-violet-600 text-white border-violet-600" : "bg-white text-slate-800 border-slate-200")
                                 : "bg-white group-hover:bg-violet-600 group-hover:text-white text-slate-800 border-slate-200"
                               }`}>
                               {token.word}
                             </span>
-                            
+
                             {/* 👇 2. 클릭된 상태일 때는 다른 단어의 Hover 툴팁 팝업 차단 */}
-                            <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-30 flex-col items-center ${
-                              activeTokenIdx !== null 
-                                ? (activeTokenIdx === idx ? "flex" : "hidden") 
+                            <div className={`absolute bottom-full left-1/2 -translate-x-1/2 mb-2 z-30 flex-col items-center ${activeTokenIdx !== null
+                                ? (activeTokenIdx === idx ? "flex" : "hidden")
                                 : "hidden group-hover:flex"
                               }`}>
                               <div className="bg-slate-900 text-white text-xs rounded-lg py-1.5 px-2.5 shadow-xl whitespace-nowrap flex items-center gap-1.5 border border-slate-700">
@@ -1169,22 +1195,21 @@ export default function Home() {
                   setIsVocabEditMode(!isVocabEditMode);
                   setSelectedVocabIds([]);
                 }}
-                className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                  isVocabEditMode ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
+                className={`text-[11px] font-semibold px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${isVocabEditMode ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                  }`}
               >
                 {isVocabEditMode ? '완료' : '편집'}
               </button>
             )}
             {!isVocabEditMode && (
-            <button
-              onClick={() => setIsVocabBlindMode(!isVocabBlindMode)}
-              className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${isVocabBlindMode ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
-                }`}
-            >
-              {isVocabBlindMode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
-              블라인드 {isVocabBlindMode ? "ON" : "OFF"}
-            </button>
+              <button
+                onClick={() => setIsVocabBlindMode(!isVocabBlindMode)}
+                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all cursor-pointer ${isVocabBlindMode ? "bg-emerald-100 text-emerald-700" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+                  }`}
+              >
+                {isVocabBlindMode ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                블라인드 {isVocabBlindMode ? "ON" : "OFF"}
+              </button>
             )}
           </div>
           <button
@@ -1207,19 +1232,17 @@ export default function Home() {
           ) : (
             <div className="space-y-3">
               {vocab.map((item) => (
-                <div 
-                  key={item.id} 
+                <div
+                  key={item.id}
                   onClick={() => isVocabEditMode && toggleVocabSelection(item.id)}
-                  className={`group p-4 rounded-xl border shadow-sm flex relative transition-all duration-300 ${
-                    item.isMemorized && !isVocabEditMode ? "bg-slate-100 border-slate-200 opacity-60 grayscale-[50%]" : "bg-white border-slate-200"
-                  } ${isVocabEditMode ? "cursor-pointer hover:border-violet-300" : ""}`}
+                  className={`group p-4 rounded-xl border shadow-sm flex relative transition-all duration-300 ${item.isMemorized && !isVocabEditMode ? "bg-slate-100 border-slate-200 opacity-60 grayscale-[50%]" : "bg-white border-slate-200"
+                    } ${isVocabEditMode ? "cursor-pointer hover:border-violet-300" : ""}`}
                 >
-                  
+
                   {isVocabEditMode && (
                     <div className="flex items-center justify-center mr-3">
-                      <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
-                        selectedVocabIds.includes(item.id) ? "bg-violet-600 border-violet-600" : "bg-white border-slate-300"
-                      }`}>
+                      <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${selectedVocabIds.includes(item.id) ? "bg-violet-600 border-violet-600" : "bg-white border-slate-300"
+                        }`}>
                         {selectedVocabIds.includes(item.id) && <Check className="w-3.5 h-3.5 text-white" />}
                       </div>
                     </div>
@@ -1284,13 +1307,13 @@ export default function Home() {
 
         {isVocabEditMode && vocab.length > 0 && (
           <div className="absolute bottom-0 left-0 w-full bg-white border-t border-slate-200 p-4 flex items-center justify-between shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)] animate-in slide-in-from-bottom-5">
-            <button 
+            <button
               onClick={handleSelectAllVocab}
               className="text-sm font-bold text-slate-600 px-3 py-2 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer"
             >
               {selectedVocabIds.length === vocab.length ? "전체 해제" : "전체 선택"}
             </button>
-            <button 
+            <button
               onClick={handleDeleteSelectedVocab}
               disabled={selectedVocabIds.length === 0}
               className="text-sm font-bold bg-rose-500 hover:bg-rose-600 text-white px-5 py-2.5 rounded-xl transition-colors disabled:opacity-50 shadow-sm flex items-center gap-1.5 cursor-pointer"
@@ -1304,7 +1327,7 @@ export default function Home() {
       {showProModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-3xl max-w-sm w-full p-6 shadow-2xl relative animate-in zoom-in-95 duration-200 overflow-hidden">
-            
+
             <div className="absolute top-0 left-0 w-full h-32 bg-gradient-to-br from-violet-500/20 to-fuchsia-500/20 blur-3xl -z-10" />
 
             <button
@@ -1355,10 +1378,7 @@ export default function Home() {
                     <span className="text-sm font-medium text-slate-500 mb-1">/ 월</span>
                   </div>
                   <button
-                    onClick={() => {
-                      toast.success("현재는 베타 서비스 기간으로 모든 기능이 무료로 제공됩니다! 🎉", { duration: 4000 });
-                      setShowProModal(false);
-                    }}
+                    onClick={handleSubscribe} // 👈 기존 toast 알림 대신 결제창 함수 연결!
                     className="w-full py-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 hover:from-violet-700 hover:to-fuchsia-700 text-white rounded-xl font-bold text-base transition-all shadow-lg shadow-violet-200 hover:shadow-xl hover:-translate-y-0.5 active:translate-y-0 cursor-pointer"
                   >
                     PRO 플랜 7일 무료 체험하기
@@ -1369,7 +1389,7 @@ export default function Home() {
                 </>
               )}
             </div>
-            
+
           </div>
         </div>
       )}

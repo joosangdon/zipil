@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { Play, Bookmark, RotateCcw, Gamepad2, Brain, Mic, Timer, Lock, Crown, ChevronRight, X, ChevronLeft, Send, CheckCircle2, XCircle, Volume2, Eye, ArrowRight, Lightbulb, Loader2, Square } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
+import { loadTossPayments } from '@tosspayments/payment-sdk'; // 👈 추가
 
 const DEFAULT_WORDS = [
   { word: "consistency", meaning: "일관성", pos: "명사" },
@@ -104,11 +105,29 @@ export default function QuizPage() {
       if (!user) return;
 
       setUser(user);
+      
+      // 1. 기존 관리자 권한 유지 (테스트 편의를 위해)
       const ADMIN_EMAILS = ['plimieom0@gmail.com', 'admin@zipil.com'];
-      if (ADMIN_EMAILS.includes(user.email || '')) {
-        setIsProUser(true);
+      let hasProAccess = ADMIN_EMAILS.includes(user.email || '');
+
+      // 2. 💡 관리자가 아니라면? DB에서 구독 테이블을 조회하여 권한 확인!
+      if (!hasProAccess) {
+        const { data: subData, error } = await supabase
+          .from('subscriptions')
+          .select('status')
+          .eq('user_id', user.id)
+          .maybeSingle(); // 에러 방지를 위해 maybeSingle 사용
+
+        // 상태가 'ACTIVE'이면 PRO 권한 부여
+        if (subData && subData.status === 'ACTIVE') {
+          hasProAccess = true;
+        }
       }
+
+      // 3. 최종 상태 업데이트
+      setIsProUser(hasProAccess);
     };
+    
     checkUserStatus();
   }, []);
 
@@ -228,7 +247,7 @@ export default function QuizPage() {
       title: '나만의 맞춤 영작 퀴즈',
       description: '기록장에서 내가 썼던 문장을 AI가 빈칸 문제로 변형합니다.',
       icon: <Brain className="w-8 h-8 text-rose-500" />,
-      isPro: false,
+      isPro: true,
       color: 'bg-rose-50 border-rose-200 hover:border-rose-400',
     },
     {
@@ -353,6 +372,33 @@ export default function QuizPage() {
         setIsFinished(true);
       }
     }, 1000);
+  };
+
+  // 💡 정기구독(빌링) 카드 등록 창 띄우기
+  const handleSubscribe = async () => {
+    if (!user) {
+      toast.error("로그인이 필요합니다.");
+      return;
+    }
+
+    try {
+      const clientKey = process.env.NEXT_PUBLIC_TOSS_CLIENT_KEY;
+      if (!clientKey) {
+        toast.error("결제 연동 키가 설정되지 않았습니다.");
+        return;
+      }
+
+      const tossPayments = await loadTossPayments(clientKey);
+
+      await tossPayments.requestBillingAuth('카드', {
+        customerKey: user.id, // Supabase 유저 ID 전달
+        successUrl: `${window.location.origin}/payment/success`,
+        failUrl: `${window.location.origin}/payment/fail`,
+      });
+    } catch (error) {
+      console.error("결제창 호출 에러:", error);
+      toast.error("결제창을 여는 중 문제가 발생했습니다.");
+    }
   };
 
   const startWeaknessQuiz = async () => {
@@ -1358,8 +1404,8 @@ export default function QuizPage() {
                   onClick={handleTaSkip}
                   disabled={!!taFeedback}
                   className={`mt-6 text-sm font-bold transition-all duration-300 ${taFeedback
-                      ? "opacity-30 text-slate-300 cursor-not-allowed pointer-events-none"
-                      : "text-slate-400 hover:text-red-500 underline underline-offset-4 cursor-pointer"
+                    ? "opacity-30 text-slate-300 cursor-not-allowed pointer-events-none"
+                    : "text-slate-400 hover:text-red-500 underline underline-offset-4 cursor-pointer"
                     }`}
                 >
                   모르겠어요 (시간 -5초 패스)
@@ -1411,8 +1457,8 @@ export default function QuizPage() {
               <div className="flex items-end justify-center gap-1 mb-3">
                 <span className="text-3xl font-extrabold text-slate-900">₩9,900</span><span className="text-sm font-medium text-slate-500 mb-1">/ 월</span>
               </div>
-              <button onClick={() => { toast.success("현재는 베타 서비스 기간으로 모든 기능이 무료로 제공됩니다! 🎉"); setShowProModal(false); }} className="w-full py-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-xl font-bold">
-                PRO 플랜 무료 체험하기
+              <button onClick={handleSubscribe} className="w-full py-4 bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white rounded-xl font-bold cursor-pointer hover:opacity-90 transition-opacity shadow-md">
+                PRO 플랜 7일 무료 체험하기
               </button>
             </div>
           </div>
