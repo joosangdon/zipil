@@ -44,6 +44,10 @@ export default function PaymentSuccessPage() {
         const { data: { user } } = await supabase.auth.getUser();
         if (!user) throw new Error("로그인 정보를 찾을 수 없습니다.");
 
+        // 7일 뒤 날짜 계산
+        const nextBillingDate = new Date();
+        nextBillingDate.setDate(nextBillingDate.getDate() + 7);
+
         const { error: dbError } = await supabase.from('subscriptions').upsert([
           {
             user_id: user.id,
@@ -51,6 +55,7 @@ export default function PaymentSuccessPage() {
             card_company: cardCompany,
             card_number: cardNumber,
             status: 'ACTIVE',
+            next_billing_date: nextBillingDate.toISOString(),
             updated_at: new Date().toISOString()
           }
         ], { onConflict: 'user_id' });
