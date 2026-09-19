@@ -1,17 +1,17 @@
 "use client";
 
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { CheckCircle2, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
-export default function PaymentSuccessPage() {
+// 1. 기존 PaymentSuccessPage의 로직을 SuccessContent라는 이름으로 분리합니다.
+function SuccessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [statusText, setStatusText] = useState("결제 정보를 안전하게 처리하고 있습니다...");
   
-  // 👇 중복 호출 방지를 위한 useRef 추가
   const hasProcessed = useRef(false);
 
   const authKey = searchParams.get('authKey');
@@ -19,7 +19,6 @@ export default function PaymentSuccessPage() {
 
   useEffect(() => {
     const processBilling = async () => {
-      // 👇 이미 처리된 요청이면 즉시 종료
       if (hasProcessed.current) return;
       hasProcessed.current = true;
 
@@ -92,5 +91,18 @@ export default function PaymentSuccessPage() {
         </div>
       </div>
     </main>
+  );
+}
+
+// 2. 외부로 내보내는 메인 페이지는 Suspense 껍데기를 씌워서 감싸줍니다.
+export default function PaymentSuccessPage() {
+  return (
+    <Suspense fallback={
+      <main className="min-h-screen bg-[#FAF9F6] flex items-center justify-center p-4">
+        <Loader2 className="w-8 h-8 animate-spin text-violet-600" />
+      </main>
+    }>
+      <SuccessContent />
+    </Suspense>
   );
 }

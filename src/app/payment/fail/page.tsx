@@ -1,10 +1,11 @@
 "use client";
 
-import React from 'react';
+import React, { Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { XCircle } from 'lucide-react';
 
-export default function PaymentFailPage() {
+// 1. 기존에 있던 알맹이(로직과 UI)를 FailContent 라는 이름으로 묶어줍니다.
+function FailContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -33,5 +34,14 @@ export default function PaymentFailPage() {
         </button>
       </div>
     </main>
+  );
+}
+
+// 2. 밖으로 내보내는 진짜 페이지는 껍데기(Suspense)를 씌워서 알맹이를 불러옵니다.
+export default function PaymentFailPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-[#FAF9F6] flex items-center justify-center">로딩 중...</div>}>
+      <FailContent />
+    </Suspense>
   );
 }
