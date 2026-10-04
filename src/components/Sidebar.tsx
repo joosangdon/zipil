@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from 'react';
-import { Home, Gamepad2, BarChart2, ChevronLeft, User } from 'lucide-react';
+import { Home, Gamepad2, BarChart2, ChevronLeft, User, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation'; // useRouter 제거 (안 쓰임)
 import { supabase } from '@/lib/supabase';
@@ -112,7 +112,33 @@ export default function Sidebar() {
           <BarChart2 className="w-5 h-5 shrink-0" />
           {!isSidebarCollapsed && <span className="text-sm whitespace-nowrap">학습 통계</span>}
         </Link>
-
+        {/* AI 문서 분석 (로그인 필수) */}
+        <Link 
+          href="/analyze" 
+          onClick={(e) => handleRestrictedClick(e, 'AI 문서 분석')}
+          className={`flex items-center gap-3 px-3 py-3 rounded-xl transition-colors ${
+            pathname === '/analyze' 
+              ? "bg-slate-800/80 text-indigo-400 font-semibold" 
+              : "hover:bg-slate-800/50 hover:text-white text-slate-400 font-medium"
+          } ${isSidebarCollapsed ? "justify-center" : ""}`}
+        >
+          <div className="relative flex items-center justify-center">
+            <Sparkles className={`w-5 h-5 shrink-0 ${pathname === '/analyze' ? 'text-indigo-400' : 'text-slate-400'}`} />
+            {/* PRO 뱃지 (사이드바가 열려있을 때만 표시) */}
+            {!isSidebarCollapsed && (
+              <span className="absolute -top-1.5 -right-2 flex h-2 w-2">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-indigo-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
+              </span>
+            )}
+          </div>
+          {!isSidebarCollapsed && (
+            <div className="flex items-center justify-between w-full">
+              <span className="text-sm whitespace-nowrap">AI 문서 분석</span>
+              <span className="text-[9px] font-black bg-indigo-500/20 text-indigo-400 px-1.5 py-0.5 rounded ml-2">PRO</span>
+            </div>
+          )}
+        </Link>
         {/* 마이페이지 (로그인 필수) */}
         <Link 
           href="/mypage" 
