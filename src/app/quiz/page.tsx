@@ -173,6 +173,20 @@ export default function QuizPage() {
   const [taFeedback, setTaFeedback] = useState<'correct' | 'wrong' | null>(null);
   const taInputRef = useRef<HTMLInputElement>(null);
 
+  // 🎵 정답 효과음 재생 함수
+  const playCorrectSound = () => {
+    const audio = new Audio('/sounds/correct.mp3');
+    audio.volume = 0.5; // 볼륨 조절 (0.0 ~ 1.0)
+    audio.play().catch((e) => console.log('오디오 재생 실패:', e));
+  };
+
+  // 🎵 오답 효과음 재생 함수
+  const playWrongSound = () => {
+    const audio = new Audio('/sounds/wrong.mp3');
+    audio.volume = 0.5;
+    audio.play().catch((e) => console.log('오디오 재생 실패:', e));
+  };
+
   // ⏳ 타이머 로직 (안으로 이동 완료)
   useEffect(() => {
     let timer: NodeJS.Timeout;
@@ -360,8 +374,13 @@ export default function QuizPage() {
     const currentQ = questions[currentIdx];
     const isCorrect = option === currentQ.answer;
 
-    if (isCorrect) setScore((prev) => prev + 1);
-    else setWrongQuestions((prev) => [...prev, currentQ]);
+    if (isCorrect) {
+      playCorrectSound(); // 🎵 정답 소리 추가!
+      setScore((prev) => prev + 1);
+    } else {
+      playWrongSound(); // 🎵 오답 소리 추가!
+      setWrongQuestions((prev) => [...prev, currentQ]);
+    }
 
     setTimeout(() => {
       if (currentIdx + 1 < questions.length) {
@@ -483,6 +502,7 @@ export default function QuizPage() {
     const isCorrect = typingInput.trim().toLowerCase() === currentQ.answer.toLowerCase();
 
     if (isCorrect) {
+      playCorrectSound(); // 🎵 정답 소리 추가!
       setIsTypingCompleted(true);
 
       if (!isHintUsed) {
@@ -495,6 +515,7 @@ export default function QuizPage() {
       }
       playAudio(currentQ.originalSentence);
     } else {
+      playWrongSound(); // 🎵 오답 소리 추가!
       setIsTypingError(true);
       setIsHintUsed(true);
       setShowHint(true);
@@ -760,6 +781,7 @@ export default function QuizPage() {
     );
 
     if (isCorrect) {
+      playCorrectSound(); // 🎵 정답 소리 추가!
       setTaTimeLeft((prev) => Math.min(prev + 3, 60));
       setTaScore((prev) => prev + 1);
       setTaFeedback('correct');
@@ -771,6 +793,7 @@ export default function QuizPage() {
         taInputRef.current?.focus();
       }, 300);
     } else {
+      playWrongSound(); // 🎵 오답 소리 추가!
       setTaTimeLeft((prev) => prev - 5);
       setTaFeedback('wrong');
       setTimeout(() => setTaFeedback(null), 500);
